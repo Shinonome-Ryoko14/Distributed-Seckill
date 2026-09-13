@@ -81,3 +81,119 @@ make loadtest  # 跑 k6 压测脚本并记录结果
 | `简历Project1：一个面向高并发场景的分布式秒杀系统.md` | 业务背景与演进思路（背景参考） |
 | `简历Project1--技术栈.md` | 知识地图与"为什么这样选型"（背景参考） |
 | `harness_project.md` | 本文档：AI 协作守则 |
+| `docs/DECISIONS.md` | 架构决策记录（ADR），所有"为什么用 X 不用 Y" |
+| `docs/PROGRESS.md` | 里程碑状态与任务日志（每日开工先读） |
+| `docs/DAILY_KICKOFF.md` | 每日开工口令模板 |
+
+---
+
+## 10. 技术选型（已定，不得擅自更换）
+
+| 项 | 决策 | 说明 |
+|---|---|---|
+| 语言/版本 | Go 1.25.0 | 与 `go.mod` 一致 |
+| Web 框架 | Gin | |
+| DB 访问 | `database/sql` + **手写 SQL** | 不用 ORM，SQL 可控、可讲 EXPLAIN/索引 |
+| 数据库 | MySQL 8.0 | 开发环境宿主端口 `3307`（见 ADR-0007） |
+| 缓存 | Redis 7 + `redis/go-redis/v9` | |
+| 消息队列 | Kafka + `franz-go` (twmb) | 里程碑 B 启用 |
+| 迁移 | `golang-migrate` | 执行 `migrations/*.sql` |
+| 日志 | 标准库 `log/slog` | JSON/Text 结构化，零依赖 |
+| 鉴权 | `golang-jwt/jwt/v5` (HS256) | |
+| 密码哈希 | `golang.org/x/crypto/bcrypt` | |
+| ID 生成 | `oklog/ulid/v2` | `event_id` / `order_no`，可按时间排序 |
+| 配置 | 标准库 env + 默认值 | 不引 viper |
+| 代码质量 | `gofmt` + `goimports` + `golangci-lint` | 配 `.golangci.yml` |
+| 可观测 | `prometheus/client_golang` | 里程碑 C 启用 |
+
+> 更换任何选型前，先写一条 ADR 到 `docs/DECISIONS.md` 并说明理由，禁止默默替换。
+
+## 11. 代码规范（靠工具强制，不靠自觉）
+
+1. 格式：`gofmt` + `goimports`；import 分三组，组间空行：标准库 / 三方 / 本项目 `github.com/Shinonome-Ryoko14/Distributed-Seckill`。
+2. 静态检查：`golangci-lint`，启用 `errcheck, govet, staticcheck, revive, ineffassign, unused, bodyclose, noctx`，配置固化在 `.golangci.yml`。提交前 `make lint`。
+3. 错误：一律 `fmt.Errorf("...: %w", err)` 包装并保留调用链；禁止吞错（`_ = err` 需注释说明）；禁止裸 `panic`，仅装配期可用 `log.Fatal`/`slog.Error` 退出。
+4. 上下文：所有 IO 函数**首参 `context.Context`**，`trace_id` 通过 ctx 贯穿全链路。
+5. 日志：统一 `log/slog`，结构化 `key=value`/JSON；禁止 `fmt.Println` 打印业务信息。
+6. 注释：只写"为什么"，不写"做什么"；代码自解释优先。
+7. 并发安全代码（Lua、扣减、幂等）必须附并发测试。
+
+## 12. 项目结构约定
+
+```
+services/<svc>/
+  cmd/server/main.go     # 只做装配：加载配置→连依赖→注册路由→优雅退出
+  internal/
+    handler/             # HTTP 层：校验入参、调 service、统一响应
+    service/             # 业务逻辑
+    repository/          # 数据访问（MySQL/Redis）
+    model/               # 领域模型 / DTO
+internal/                # 跨服务共享基础设施
+  config/ log/ response/ errs/ jwt/ rediscli/ kafkacli/ middleware/ ctxkey/
+migrations/              # 顺序编号 .sql
+scripts/                 # seed / warmup / reconcile
+deploy/                  # docker-compose.yml + .env.example
+k6/                      # 压测脚本 + 结果
+docs/                    # 架构图 / 决策记录 / 进度 / 故障演练
+```
+
+铁律：
+- `main.go` 不写业务逻辑，只做依赖装配。
+- `handler` **不得**直接访问 `repository`，必须经过 `service`。
+- 每个服务的 `model` 仅供自身使用，不跨服务共享；只有基础设施代码进顶层 `internal/`。
+- 表只允许一个服务写入（单一事实源）。
+
+## 13. 工具链
+
+- `Makefile` 是**唯一入口**，目标：`tools / up / down / migrate / seed / warmup / run / test / lint / build`。
+- `make tools` 用 `go install <pkg>@<固定版本>` 安装：`golangci-lint`、`goimports`、`golang-migrate`（k6/wrk 到里程碑 C）。
+- 版本钉死：Go `1.25.0`、MySQL `8.0`、Redis `7`。
+- `.golangci.yml`、`deploy/.env.example` 入库；真实 `.env` 不入库（已在 `.gitignore`）。
+
+## 14. 依赖白名单
+
+Gin、`redis/go-redis/v9`、`franz-go`、`golang-jwt/jwt/v5`、`x/crypto`、`oklog/ulid/v2`、`prometheus/client_golang`（C 阶段）。
+
+> 新增依赖前先确认必要性，并写 ADR 说明；优先标准库与已在使用的最小依赖。
+
+## 15. 上下文与决策记录（防止遗忘）
+
+- 任何"为什么用 X 不用 Y"的决策，写入 `docs/DECISIONS.md`（ADR）。
+- ADR 格式：编号 / 日期 / 状态 / 背景 / 决策 / 理由 / 被否方案。
+- `docs/PROGRESS.md` 维护当前里程碑与任务日志，**每完成一个任务必须更新**。
+- AI 每次开工先读 `docs/PROGRESS.md` 确认当前进度与里程碑。
+
+## 16. Git 与完成定义（DoD）
+
+- 提交信息遵循 Conventional Commits：`feat: / fix: / refactor: / docs: / test: / chore:`。
+- 分支：`feat/<模块>`、`fix/<问题>`。
+- 一个任务的完成定义：代码 + 测试 + `make lint && make test` 通过 + 文档/决策更新（四者缺一不可）。
+
+## 17. 每日开工流程（新对话必执行）
+
+触发：用户新开对话，第一句为 `docs/DAILY_KICKOFF.md` 的口令。
+
+AI 必须按序执行（只读，用户确认前禁止改代码）：
+
+1. **读规则**：全文读本文件，进入状态（牢记 §3 硬约束、§10–16 规范）。
+2. **定位状态**：读 `docs/PROGRESS.md`：先读顶部「当前状态」快照（**最高权重**）；再按下方权重规则读「任务日志」。
+3. **读决策**：只读 `docs/DECISIONS.md` 中与当前里程碑/任务相关的 ADR，不全文。
+4. **对齐**：用 ≤5 行复述「当前里程碑 / 上次做到哪 / 今天建议做什么 / 阻塞」，等用户确认后再动手。
+
+任务日志读取权重（时间 × 改动量）：
+
+- 改动量分级：`L`=跨模块/跨服务/数据模型/行为/架构变更；`M`=单模块内行为变更；`S`=文档/格式/无行为变更。
+- 读取规则：
+  1. **时间优先**：精读最近 3 天或最近 5 条的全部条目，不论改动量。
+  2. **改动量兜底**：窗口外的旧条目只精读 `L` 条目，`M/S` 只看标题。
+  3. 上下文不足则扩展窗口，直到覆盖最近一条 `L` 条目。
+  4. **里程碑切换点**（如 A→B）必须精读。
+
+## 18. 收工流程（保证次日可定位）
+
+每次会话结束，AI 必须：
+
+1. 更新 `docs/PROGRESS.md` 顶部「当前状态」快照（里程碑/完成到哪/下一步/阻塞）。
+2. 追加一条任务日志：日期 / 里程碑 / 任务 / 状态 / 影响(L/M/S) / 涉及文件。
+3. 有新决策则写 ADR；无则不动 `docs/DECISIONS.md`。
+4. 提醒用户 commit，不擅自提交。
