@@ -5,11 +5,11 @@
 ## 当前状态（最高读取权重 · 开工锚点）
 
 - **当前里程碑**: A — 单体全链路（W1–W3）
-- **当前任务**: 共享基础设施 + JWT 已落地（`internal/{config,log,db,errs,response,jwt,ctxkey}`，config/jwt 单测，`make lint && make test && make build` 全绿）；**暂停等待用户完成所有权补课**
-- **上次会话结束点**: 2026-09-17 完成基础设施（任务1）+ ADR-0010 + 所有权补课包 + harness §19.2；已在对话中向用户讲解相关基础概念
-- **下一步**: 用户抽空完成 `docs/OWNERSHIP.md`（config/errs/jwt 默写 + 破坏性实验），期间有疑问随时问 AI；通过后再做 user 服务注册/登录（教学骨架模式）
+- **当前任务**: 共享基础设施 + JWT 已落地（`internal/{config,log,db,errs,response,jwt,ctxkey}`，config/jwt/errs 单测，`make lint && make test && make build` 全绿）；**基线就绪，可开始 user 服务**
+- **上次会话结束点**: 2026-09-21 移除 Go 语法练习与所有权补课痕迹，恢复基础设施基线；此前（2026-09-17）完成基础设施（任务1）+ ADR-0010
+- **下一步**: 实现 user 服务注册/登录（`services/user/*`，`internal/jwt` + bcrypt + 手写 SQL）
 - **范围基线**: 里程碑 C 采用「最小可信集」（ADR-0011）；A/B 做透，目标 **2026-11 底–12 月中收口**，2027-01–06 做第二个 Agent 项目
-- **阻塞**: 无（等待用户补课，非技术阻塞）
+- **阻塞**: 无
 
 ## 影响分级图例
 
@@ -41,8 +41,8 @@
 | 2026-09-17 | A | 用户完成 0001 三表 DDL；`make migrate` / `migrate-down` / 再 `migrate` 验收通过（唯一索引、外键 RESTRICT、中文 COMMENT 编码正确） | 完成 | L | `migrations/0001_init.{up,down}.sql` |
 | 2026-09-17 | A | 修复 Makefile `migrate` 密码回显、新增 `migrate-force`；修复迁移注释 MySQL `--` 需空格语法 | 完成 | S | `Makefile`、`migrations/0001_init.up.sql` |
 | 2026-09-17 | A | 落地共享基础设施 `internal/{config,log,db,errs,response,jwt,ctxkey}`；config/jwt 单测；引入 `jwt/v5`、`go-sql-driver/mysql`；新增 ADR-0010（响应契约/错误码/JWT） | 完成 | L | `internal/*`、`go.mod`、`deploy/.env(.example)`、`docs/DECISIONS.md` |
-| 2026-09-17 | A | 新增基础设施所有权补课包；harness 新增 §19.2 所有权原则（直写须逐次确认 + 代写附补课 + 通过门槛） | 完成 | L | `docs/OWNERSHIP.md`、`harness_project.md`、`docs/PROGRESS.md` |
 | 2026-09-17 | A | 确定工期与范围基线：里程碑 C 收敛为最小可信集（ADR-0011），目标 2026-11 底–12 月中收口 | 完成 | L | `docs/DECISIONS.md`、`docs/PROGRESS.md` |
+| 2026-09-21 | A | 回滚 Go 语法练习与所有权补课痕迹；恢复 harness §19 教学模式；补充 `internal/errs` 单测 | 完成 | M | `internal/gopatch/*`（删）、`docs/OWNERSHIP.md`（删）、`harness_project.md`、`internal/errs/errs_test.go`、`docs/PROGRESS.md` |
 | - | A | `deploy/docker-compose.yml`（mysql:3307 + redis:6379） | 完成 | L | `deploy/*` |
 | - | A | 用户注册/登录 + JWT | 待办 | L | `services/user/*`、`internal/jwt` |
 
@@ -51,6 +51,5 @@
 - 本机原生 MySQL 占用 3306，compose 使用 3307（ADR-0007）。
 - 工具链已装（`make tools`）：golangci-lint `v2.12.2` / goimports `v0.49.0` / golang-migrate `v4.19.1`。**注意**：golangci-lint `v2.13+` 要求 Go ≥1.26，当前 Go 为 1.25.0，故钉在 v2.12.2；k6/wrk 到里程碑 C。
 - MySQL 的 `--` 行注释**后面必须跟空格**（`--bcrypt...` 会报 1064 语法错）。
-- **所有权门槛**：`internal/*` 为 AI 代写，进入任务 2 前须完成 `docs/OWNERSHIP.md` 的 config/errs/jwt 默写与全部破坏性实验（harness §19.2）。
 - 应用配置走环境变量（见 `internal/config`）：`HTTP_ADDR`（默认 `:8080`，各服务需自行覆盖，如 user `:8081`）、`MYSQL_HOST/PORT/DATABASE/USER/PASSWORD`（密码缺省回退 `MYSQL_ROOT_PASSWORD`，亦可用 `MYSQL_DSN` 整体覆盖）、`JWT_SECRET`（必填）/`JWT_TTL`/`JWT_ISSUER`、`LOG_FORMAT`/`LOG_LEVEL`。`config.Load()` 默认 best-effort 加载 `deploy/.env`（`ENV_FILE` 可改），已有环境变量优先；本地 `deploy/.env` 已补 `JWT_SECRET`。
 - 迁移失败会把 `schema_migrations` 置为 dirty：若失败发生在首个 DDL 且未建任何业务表，直接 `DROP TABLE schema_migrations;` 后重跑 `make migrate`；`make migrate-force V=<上一版本>` 可用于已知版本的恢复（勿用 `V=0`，它会被当成真实版本）。
