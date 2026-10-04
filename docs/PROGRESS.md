@@ -5,9 +5,9 @@
 ## 当前状态（最高读取权重 · 开工锚点）
 
 - **当前里程碑**: A — 单体全链路（W1–W3）
-- **当前任务**: 共享基础设施 + JWT 已落地（`internal/{config,log,db,errs,response,jwt,ctxkey}`，config/jwt/errs 单测，`make lint && make test && make build` 全绿）；**基线就绪，可开始 user 服务**
-- **上次会话结束点**: 2026-09-21 移除 Go 语法练习与所有权补课痕迹，恢复基础设施基线；此前（2026-09-17）完成基础设施（任务1）+ ADR-0010
-- **下一步**: 实现 user 服务注册/登录（`services/user/*`，`internal/jwt` + bcrypt + 手写 SQL）
+- **当前任务**: user 服务注册/登录已落地（`services/user/*`：model/repo/service + Gin handler/router/main 装配，handler/service 单测，`internal/jwt` + bcrypt + 手写 SQL；E2E curl 冒烟通过）；`make lint && make test && make build` 全绿
+- **上次会话结束点**: 2026-10-04 完成 user 服务注册/登录全链路（HTTP 接入层 + JWT + 单测 + E2E 冒烟）并统一提交；此前（2026-09-21）恢复基础设施基线
+- **下一步**: 实现 product 服务（商品/秒杀活动主数据基础接口，`services/product/*`）
 - **范围基线**: 里程碑 C 采用「最小可信集」（ADR-0011）；A/B 做透，目标 **2026-11 底–12 月中收口**，2027-01–06 做第二个 Agent 项目
 - **阻塞**: 无
 
@@ -44,7 +44,7 @@
 | 2026-09-17 | A | 确定工期与范围基线：里程碑 C 收敛为最小可信集（ADR-0011），目标 2026-11 底–12 月中收口 | 完成 | L | `docs/DECISIONS.md`、`docs/PROGRESS.md` |
 | 2026-09-21 | A | 回滚 Go 语法练习与所有权补课痕迹；恢复 harness §19 教学模式；补充 `internal/errs` 单测 | 完成 | M | `internal/gopatch/*`（删）、`docs/OWNERSHIP.md`（删）、`harness_project.md`、`internal/errs/errs_test.go`、`docs/PROGRESS.md` |
 | - | A | `deploy/docker-compose.yml`（mysql:3307 + redis:6379） | 完成 | L | `deploy/*` |
-| - | A | 用户注册/登录 + JWT | 待办 | L | `services/user/*`、`internal/jwt` |
+| 2026-10-04 | A | 用户注册/登录 + JWT：model/repo/service + Gin handler/router/main 装配、handler/service 单测、E2E curl 冒烟 | 完成 | L | `services/user/**`、`go.mod`、`go.sum`、`docs/PROGRESS.md` |
 
 ## 已知问题 / 待办池
 
