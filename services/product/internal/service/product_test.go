@@ -99,7 +99,7 @@ func TestCreateInvalidParam(t *testing.T) {
 				t.Errorf("Create() code = %d, want %d", got, errs.CodeProductInvalid)
 			}
 			if repo.createCalls != 0 {
-				t.Errorf("repo.Create calls = %d, want 0", repo.createCalls)
+				t.Errorf("repo.createCalls = %d, want 0", repo.createCalls)
 			}
 		})
 	}
