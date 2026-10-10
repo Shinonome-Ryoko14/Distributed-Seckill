@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-// Code 是业务错误码。0 表示成功；1xxxx 为用户域，5xxxx 为系统域。
+// Code 是业务错误码。0 表示成功；1xxxx 为用户域,2xxxx 为商品域,5xxxx 为系统域。
 type Code int
 
 // 业务错误码定义。
@@ -18,6 +18,9 @@ const (
 	CodeUserExists    Code = 10002
 	CodeUserNotFound  Code = 10003
 	CodePasswordWrong Code = 10004
+
+	CodeProductNotFound Code = 20001
+	CodeProductInvalid  Code = 20002
 
 	CodeInternal Code = 50000
 )
