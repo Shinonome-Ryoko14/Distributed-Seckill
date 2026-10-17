@@ -7,7 +7,7 @@ import (
 )
 
 // NewRouter 装配 product 服务的路由与中间件。
-func NewRouter(h *ProductHandler) *gin.Engine {
+func NewRouter(ph *ProductHandler, ah *ActivityHandler) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 
@@ -17,9 +17,15 @@ func NewRouter(h *ProductHandler) *gin.Engine {
 
 	products := r.Group("/api/v1/products")
 	{
-		products.POST("", h.Create)
-		products.GET("", h.List)
-		products.GET("/:id", h.GetByID)
+		products.POST("", ph.Create)
+		products.GET("", ph.List)
+		products.GET("/:id", ph.GetByID)
+	}
+
+	activities := r.Group("/api/v1/activities")
+	{
+		activities.POST("", ah.Create)
+		activities.GET("/:id", ah.GetByID)
 	}
 	return r
 }

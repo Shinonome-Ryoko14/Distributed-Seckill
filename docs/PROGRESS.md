@@ -5,9 +5,9 @@
 ## 当前状态（最高读取权重 · 开工锚点）
 
 - **当前里程碑**: A — 同步直连全链路（每域一服务，W1–W3）
-- **当前任务**: product 商品主数据接口已落地（`services/product/*`：model/repo/service + Gin handler/router/main，商品域错误码 20001/20002，handler/service 单测；E2E curl 冒烟通过）；`make lint && make test && make build` 全绿
-- **上次会话结束点**: 2026-10-10 完成 product 商品接口（HTTP 接入层 + 手写 SQL + 分页 + 单测 + E2E 冒烟）并统一提交；此前（2026-10-04）user 注册/登录全链路
-- **下一步**: 实现 product 活动主数据接口（POST/GET activities，`services/product/*`）
+- **当前任务**: product 活动主数据接口已落地（`services/product/*`：model/repo/service + Gin handler/router/main，活动域错误码 20003/20004，service/handler 单测，导出符号注释齐全）；`make lint && make test && make build` 全绿
+- **上次会话结束点**: 2026-10-17 完成 product 活动主数据接口（POST/GET activities、RFC3339 时间边界解析、先查 product 再校验、补 13 处导出注释）；此前（2026-10-10）product 商品接口、（2026-10-04）user 注册/登录全链路
+- **下一步**: 进入 W2：实现 product 商品详情缓存（Cache Aside + TTL + 空值防穿透）
 - **范围基线**: 里程碑 C 采用「最小可信集」（ADR-0011）；A/B 做透，目标 **2026-11 底–12 月中收口**，2027-01–06 做第二个 Agent 项目
 - **阻塞**: 无
 
@@ -46,6 +46,7 @@
 | - | A | `deploy/docker-compose.yml`（mysql:3307 + redis:6379） | 完成 | L | `deploy/*` |
 | 2026-10-04 | A | 用户注册/登录 + JWT：model/repo/service + Gin handler/router/main 装配、handler/service 单测、E2E curl 冒烟 | 完成 | L | `services/user/**`、`go.mod`、`go.sum`、`docs/PROGRESS.md` |
 | 2026-10-10 | A | product 商品主数据接口：model/repo/service + Gin router/main、分页、商品域错误码 20001/20002、handler/service 单测、E2E 冒烟 | 完成 | L | `services/product/**`、`internal/errs/errs.go`、`docs/PROGRESS.md` |
+| 2026-10-17 | A | product 活动主数据接口：POST/GET activities、活动域错误码 20003/20004、RFC3339 时间解析、先查 product 再校验、handler/service 单测、补 13 处导出注释 | 完成 | L | `services/product/**`、`internal/errs/errs.go`、`docs/PROGRESS.md` |
 
 ## 已知问题 / 待办池
 
@@ -54,3 +55,4 @@
 - MySQL 的 `--` 行注释**后面必须跟空格**（`--bcrypt...` 会报 1064 语法错）。
 - 应用配置走环境变量（见 `internal/config`）：`HTTP_ADDR`（默认 `:8080`，各服务需自行覆盖，如 user `:8081`）、`MYSQL_HOST/PORT/DATABASE/USER/PASSWORD`（密码缺省回退 `MYSQL_ROOT_PASSWORD`，亦可用 `MYSQL_DSN` 整体覆盖）、`JWT_SECRET`（必填）/`JWT_TTL`/`JWT_ISSUER`、`LOG_FORMAT`/`LOG_LEVEL`。`config.Load()` 默认 best-effort 加载 `deploy/.env`（`ENV_FILE` 可改），已有环境变量优先；本地 `deploy/.env` 已补 `JWT_SECRET`。
 - 迁移失败会把 `schema_migrations` 置为 dirty：若失败发生在首个 DDL 且未建任何业务表，直接 `DROP TABLE schema_migrations;` 后重跑 `make migrate`；`make migrate-force V=<上一版本>` 可用于已知版本的恢复（勿用 `V=0`，它会被当成真实版本）。
+- repository 层暂无自动化测试（单测使用 fake repo），真实 SQL 依赖 E2E 冒烟；活动接口的「预热触发」按计划后置到里程碑 B，活动 status 与 start/end 时间自洽校验暂未做。

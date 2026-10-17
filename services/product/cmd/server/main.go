@@ -40,9 +40,16 @@ func run() error {
 	}
 	defer func() { _ = conn.Close() }()
 
-	repo := repository.NewMySQLProductRepository(conn)
-	svc := service.NewProductService(repo)
-	router := handler.NewRouter(handler.NewProductHandler(svc))
+	productRepo := repository.NewMySQLProductRepository(conn)
+	activityRepo := repository.NewMySQLActivityRepository(conn)
+
+	productSvc := service.NewProductService(productRepo)
+	activitySvc := service.NewActivityService(productRepo, activityRepo)
+
+	router := handler.NewRouter(
+		handler.NewProductHandler(productSvc),
+		handler.NewActivityHandler(activitySvc),
+	)
 
 	srv := &http.Server{
 		Addr:         cfg.HTTP.Addr,

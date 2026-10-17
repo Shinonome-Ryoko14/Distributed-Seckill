@@ -48,7 +48,7 @@ type apiResponse struct {
 
 func newTestRouter(fake *fakeProductService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	return NewRouter(NewProductHandler(fake))
+	return NewRouter(NewProductHandler(fake), NewActivityHandler(&fakeActivityService{}))
 }
 
 func doRequest(t *testing.T, r *gin.Engine, method, path, body string) (int, apiResponse) {

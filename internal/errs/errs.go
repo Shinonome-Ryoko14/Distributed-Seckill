@@ -19,8 +19,10 @@ const (
 	CodeUserNotFound  Code = 10003
 	CodePasswordWrong Code = 10004
 
-	CodeProductNotFound Code = 20001
-	CodeProductInvalid  Code = 20002
+	CodeProductNotFound  Code = 20001
+	CodeProductInvalid   Code = 20002
+	CodeActivityNotFound Code = 20003
+	CodeActivityInvalid  Code = 20004
 
 	CodeInternal Code = 50000
 )
