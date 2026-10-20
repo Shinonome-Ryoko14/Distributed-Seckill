@@ -22,6 +22,8 @@ const (
 	defaultConnMaxLife   = time.Hour
 	defaultJWTTTL        = 24 * time.Hour
 	defaultJWTIssuer     = "distributed-seckill"
+	defaultRedisAddr     = "127.0.0.1:6379"
+	defaultRedisDB       = 0
 )
 
 // Config 是全部服务的共享配置，具体服务通过环境变量覆盖默认值。
@@ -29,6 +31,7 @@ type Config struct {
 	HTTP  HTTPConfig
 	Log   LogConfig
 	MySQL MySQLConfig
+	Redis RedisConfig
 	JWT   JWTConfig
 }
 
@@ -58,6 +61,13 @@ type JWTConfig struct {
 	Issuer string
 }
 
+// RedisConfig 是 Redis 客户端配置。
+type RedisConfig struct {
+	Addr     string
+	Password string
+	DB       int
+}
+
 // Load 先以 best-effort 方式加载 ENV_FILE（默认 deploy/.env），再读取进程环境变量。
 // 已存在的进程环境变量优先，不会被 .env 覆盖。
 func Load() (*Config, error) {
@@ -84,6 +94,13 @@ func load(lookup func(string) string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	redisDB, err := envInt(lookup, "REDIS_DB", defaultRedisDB)
+	if err != nil {
+		return nil, err
+	}
+	if redisDB < 0 {
+		return nil, fmt.Errorf("REDIS_DB must be >= 0, got %d", redisDB)
+	}
 	jwtTTL, err := envDuration(lookup, "JWT_TTL", defaultJWTTTL)
 	if err != nil {
 		return nil, err
@@ -107,6 +124,11 @@ func load(lookup func(string) string) (*Config, error) {
 			MaxOpenConns:    maxOpen,
 			MaxIdleConns:    maxIdle,
 			ConnMaxLifetime: connMaxLife,
+		},
+		Redis: RedisConfig{
+			Addr:     env(lookup, "REDIS_ADDR", defaultRedisAddr),
+			Password: lookup("REDIS_PASSWORD"),
+			DB:       redisDB,
 		},
 		JWT: JWTConfig{
 			Secret: secret,
