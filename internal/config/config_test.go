@@ -34,6 +34,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.JWT.Secret != "s3cret" || cfg.JWT.TTL != defaultJWTTTL || cfg.JWT.Issuer != defaultJWTIssuer {
 		t.Errorf("JWT = %+v, want secret=s3cret ttl=%s issuer=%q", cfg.JWT, defaultJWTTTL, defaultJWTIssuer)
 	}
+	if cfg.Redis.Addr != defaultRedisAddr || cfg.Redis.Password != "" || cfg.Redis.DB != defaultRedisDB {
+		t.Errorf("Redis = %+v, want addr=%q db=%d", cfg.Redis, defaultRedisAddr, defaultRedisDB)
+	}
 }
 
 func TestLoadEnvOverride(t *testing.T) {
@@ -47,6 +50,9 @@ func TestLoadEnvOverride(t *testing.T) {
 		"MYSQL_CONN_MAX_LIFETIME": "5m",
 		"LOG_FORMAT":              "TEXT",
 		"LOG_LEVEL":               "DEBUG",
+		"REDIS_ADDR":              "redis:6380",
+		"REDIS_PASSWORD":          "redis-pw",
+		"REDIS_DB":                "3",
 	}))
 	if err != nil {
 		t.Fatalf("load: %v", err)
@@ -66,6 +72,9 @@ func TestLoadEnvOverride(t *testing.T) {
 	}
 	if cfg.Log.Format != "text" || cfg.Log.Level != "debug" {
 		t.Errorf("Log = %+v, want format=text level=debug", cfg.Log)
+	}
+	if cfg.Redis.Addr != "redis:6380" || cfg.Redis.Password != "redis-pw" || cfg.Redis.DB != 3 {
+		t.Errorf("Redis = %+v, want addr=redis:6380 password=redis-pw db=3", cfg.Redis)
 	}
 }
 
@@ -91,9 +100,11 @@ func TestLoadRequiresJWTSecret(t *testing.T) {
 
 func TestLoadRejectsInvalidValues(t *testing.T) {
 	cases := map[string]map[string]string{
-		"bad int":      {"JWT_SECRET": "s", "MYSQL_MAX_OPEN_CONNS": "abc"},
-		"bad duration": {"JWT_SECRET": "s", "JWT_TTL": "forever"},
-		"idle > open":  {"JWT_SECRET": "s", "MYSQL_MAX_OPEN_CONNS": "2", "MYSQL_MAX_IDLE_CONNS": "3"},
+		"bad int":           {"JWT_SECRET": "s", "MYSQL_MAX_OPEN_CONNS": "abc"},
+		"bad duration":      {"JWT_SECRET": "s", "JWT_TTL": "forever"},
+		"idle > open":       {"JWT_SECRET": "s", "MYSQL_MAX_OPEN_CONNS": "2", "MYSQL_MAX_IDLE_CONNS": "3"},
+		"bad redis db":      {"JWT_SECRET": "s", "REDIS_DB": "abc"},
+		"negative redis db": {"JWT_SECRET": "s", "REDIS_DB": "-1"},
 	}
 	for name, env := range cases {
 		t.Run(name, func(t *testing.T) {

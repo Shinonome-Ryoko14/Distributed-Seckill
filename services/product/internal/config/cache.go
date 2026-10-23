@@ -38,7 +38,7 @@ func LoadCache() (CacheConfig, error) {
 		return CacheConfig{}, fmt.Errorf("PRODUCT_CACHE_NULL_TTL must be positive, got %s", nullTTL)
 	}
 	if nullTTL > ttl {
-		return CacheConfig{}, fmt.Errorf("PRODUCT_CACHE_NULL_TTL (%s) must not exceed PRODUCT_CACHE_TTL (%s) ",
+		return CacheConfig{}, fmt.Errorf("PRODUCT_CACHE_NULL_TTL (%s) must not exceed PRODUCT_CACHE_TTL (%s)",
 			nullTTL, ttl)
 	}
 	return CacheConfig{TTL: ttl, NullTTL: nullTTL}, nil
