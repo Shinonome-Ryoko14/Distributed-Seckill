@@ -15,6 +15,8 @@ import (
 	"github.com/Shinonome-Ryoko14/Distributed-Seckill/internal/config"
 	"github.com/Shinonome-Ryoko14/Distributed-Seckill/internal/db"
 	"github.com/Shinonome-Ryoko14/Distributed-Seckill/internal/log"
+	"github.com/Shinonome-Ryoko14/Distributed-Seckill/internal/rediscli"
+	productconfig "github.com/Shinonome-Ryoko14/Distributed-Seckill/services/product/internal/config"
 	"github.com/Shinonome-Ryoko14/Distributed-Seckill/services/product/internal/handler"
 	"github.com/Shinonome-Ryoko14/Distributed-Seckill/services/product/internal/repository"
 	"github.com/Shinonome-Ryoko14/Distributed-Seckill/services/product/internal/service"
@@ -34,16 +36,38 @@ func run() error {
 	}
 	slog.SetDefault(log.New(cfg.Log))
 
+	cacheCfg, err := productconfig.LoadCache()
+	if err != nil {
+		return fmt.Errorf("load product cache config: %w", err)
+	}
+
 	conn, err := db.Open(context.Background(), cfg.MySQL)
 	if err != nil {
 		return fmt.Errorf("open db: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 
+	redisClient := rediscli.New(cfg.Redis)
+	defer func() { _ = redisClient.Close() }()
+
+	pingCtx, cancelPing := context.WithTimeout(context.Background(),
+		2*time.Second)
+	pingErr := rediscli.Ping(pingCtx, redisClient)
+	cancelPing()
+	if pingErr != nil {
+		slog.Warn("redis unavailable; product detail cache degrades to mysql", "error", pingErr)
+	}
+
 	productRepo := repository.NewMySQLProductRepository(conn)
+	cachedProductRepo := repository.NewCachedProductRepository(
+		productRepo,
+		repository.NewRedisProductCache(redisClient),
+		cacheCfg.TTL,
+		cacheCfg.NullTTL,
+	)
 	activityRepo := repository.NewMySQLActivityRepository(conn)
 
-	productSvc := service.NewProductService(productRepo)
+	productSvc := service.NewProductService(cachedProductRepo)
 	activitySvc := service.NewActivityService(productRepo, activityRepo)
 
 	router := handler.NewRouter(
