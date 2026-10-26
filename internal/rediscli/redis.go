@@ -20,7 +20,7 @@ func New(cfg config.RedisConfig) *redis.Client {
 		Addr:         cfg.Addr,
 		Password:     cfg.Password,
 		DB:           cfg.DB,
-		DialTimeout:  2 * time.Second,
+		DialTimeout:  ioTimeout,
 		ReadTimeout:  ioTimeout,
 		WriteTimeout: ioTimeout,
 	})

@@ -63,7 +63,7 @@ func (r *CachedProductRepository) GetByID(ctx context.Context, id uint64) (*mode
 		return p, nil
 	}
 
-	// 如果缓存未命中
+	// 如果缓存未命中或读取失败，回源DB
 	p, err = r.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err

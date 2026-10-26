@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -61,6 +63,7 @@ type stubProductRepo struct {
 	getCalls  int
 	createdID uint64
 	createErr error
+	getErr    error
 }
 
 func (s *stubProductRepo) Create(_ context.Context, _ *model.Product) (uint64, error) {
@@ -69,7 +72,7 @@ func (s *stubProductRepo) Create(_ context.Context, _ *model.Product) (uint64, e
 
 func (s *stubProductRepo) GetByID(_ context.Context, _ uint64) (*model.Product, error) {
 	s.getCalls++
-	return s.product, nil
+	return s.product, s.getErr
 }
 
 func (s *stubProductRepo) List(_ context.Context, _, _ int) ([]*model.Product, error) {
@@ -79,21 +82,164 @@ func (s *stubProductRepo) List(_ context.Context, _, _ int) ([]*model.Product, e
 func (s *stubProductRepo) Count(_ context.Context) (int64, error) { return 0, nil }
 
 func TestCachedGetByIDHit(t *testing.T) {
-	t.Skip("TODO(user): 缓存命中时不查库，返回缓存对象")
+	const id = uint64(1)
+
+	cached := &model.Product{ID: id, Name: "from-cache"}
+	repo := &stubProductRepo{
+		product: &model.Product{ID: id, Name: "from-db"},
+	}
+
+	cache := newFakeProductCache()
+	cache.values[id] = cached
+	cache.hits[id] = true
+
+	const ttl = 5 * time.Minute
+	const nullTTL = time.Minute
+	svc := NewCachedProductRepository(repo, cache, ttl, nullTTL)
+
+	got, err := svc.GetByID(context.Background(), id)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v, want nil", err)
+	}
+	if got != cached {
+		t.Errorf("GetByID() = %+v, want cached product %+v", got, cached)
+	}
+	if repo.getCalls != 0 {
+		t.Errorf("repo.GetByID calls = %d, want 0", repo.getCalls)
+	}
 }
 
 func TestCachedGetByIDMissFillsCache(t *testing.T) {
-	t.Skip("TODO(user): 未命中回源，按 ttl 回填")
+	const id = uint64(2)
+
+	dbProduct := &model.Product{ID: id, Name: "from-db"}
+	repo := &stubProductRepo{product: dbProduct}
+	cache := newFakeProductCache()
+
+	const ttl = 5 * time.Minute
+	const nullTTL = time.Minute
+	svc := NewCachedProductRepository(repo, cache, ttl, nullTTL)
+
+	got, err := svc.GetByID(context.Background(), id)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v, want nil", err)
+	}
+	if got != dbProduct {
+		t.Errorf("GetByID() = %+v, want db product %+v", got, dbProduct)
+	}
+	if repo.getCalls != 1 {
+		t.Errorf("repo.GetByID calls = %d, want 1", repo.getCalls)
+	}
+	if !cache.hits[id] {
+		t.Errorf("cache.hits[%d] = false, want true (cache not filled)", id)
+	}
+	if cache.values[id] != dbProduct {
+		t.Errorf("cache.values[%d] = %+v, want db product %+v", id, cache.values[id], dbProduct)
+	}
+	if cache.setTTLs[id] != ttl {
+		t.Errorf("cache TTL = %s, want %s", cache.setTTLs[id], ttl)
+	}
 }
 
 func TestCachedGetByIDNotFoundCachesNull(t *testing.T) {
-	t.Skip("TODO(user): 商品不存在时写 nil 值，TTL 为 nullTTL")
+	const id = uint64(3)
+
+	repo := &stubProductRepo{product: nil}
+	cache := newFakeProductCache()
+
+	const ttl = 5 * time.Minute
+	const nullTTL = time.Minute
+
+	svc := NewCachedProductRepository(repo, cache, ttl, nullTTL)
+
+	got, err := svc.GetByID(context.Background(), id)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v, want nil", err)
+	}
+	if got != nil {
+		t.Errorf("GetByID() = %+v, want nil", got)
+	}
+	if repo.getCalls != 1 {
+		t.Errorf("repo.GetByID calls = %d, want 1", repo.getCalls)
+	}
+	if !cache.hits[id] {
+		t.Errorf("negative cache not written: hits[%d] = false", id)
+	}
+	if cache.values[id] != nil {
+		t.Errorf("cache.values[%d] = %+v, want nil", id, cache.values[id])
+	}
+	if cache.setTTLs[id] != nullTTL {
+		t.Errorf("null cache TTL = %s, want %s", cache.setTTLs[id], nullTTL)
+	}
 }
 
 func TestCachedGetByIDCacheErrorFallsBack(t *testing.T) {
-	t.Skip("TODO(user): cache.Get 返回错误时仍查库并返回成功")
+	const id = uint64(4)
+
+	dbProduct := &model.Product{ID: id, Name: "from-db"}
+	repo := &stubProductRepo{product: dbProduct}
+	cache := newFakeProductCache()
+	cache.getErr = errors.New("redis down")
+
+	const ttl = 5 * time.Minute
+	const nullTTL = time.Minute
+	svc := NewCachedProductRepository(repo, cache, ttl, nullTTL)
+
+	got, err := svc.GetByID(context.Background(), id)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v, want nil", err)
+	}
+	if got != dbProduct {
+		t.Errorf("GetByID() = %+v, want db product %+v", got, dbProduct)
+	}
+	if repo.getCalls != 1 {
+		t.Errorf("repo.GetByID calls = %d, want 1", repo.getCalls)
+	}
+	if cache.setTTLs[id] != ttl {
+		t.Errorf("cache TTL = %s, want %s (should try to refill cache)", cache.setTTLs[id], ttl)
+	}
 }
 
 func TestCachedCreateDeletesNegativeCache(t *testing.T) {
-	t.Skip("TODO(user): Create 成功后 deleted 包含新 id")
+	const newID = uint64(42)
+
+	repo := &stubProductRepo{createdID: newID}
+	cache := newFakeProductCache()
+
+	const ttl = 5 * time.Minute
+	const nullTTL = time.Minute
+	svc := NewCachedProductRepository(repo, cache, ttl, nullTTL)
+	id, err := svc.Create(context.Background(), &model.Product{Name: "new"})
+	if err != nil {
+		t.Fatalf("Create() error = %v, want nil", err)
+	}
+	if id != newID {
+		t.Errorf("Create() id = %d, want %d", id, newID)
+	}
+	if !slices.Contains(cache.deleted, newID) {
+		t.Errorf("cache.Delete(%d) not called, deleted = %v", newID, cache.deleted)
+	}
+}
+
+func TestCachedGetByIDDBErrorDoesNotCache(t *testing.T) {
+	const id = uint64(5)
+
+	dbErr := errors.New("db down")
+	repo := &stubProductRepo{getErr: dbErr}
+	cache := newFakeProductCache()
+
+	const ttl = 5 * time.Minute
+	const nullTTL = time.Minute
+	svc := NewCachedProductRepository(repo, cache, ttl, nullTTL)
+
+	got, err := svc.GetByID(context.Background(), id)
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("GetByID() error = %v, want %v", err, dbErr)
+	}
+	if got != nil {
+		t.Errorf("GetByID() = %+v, want nil", got)
+	}
+	if cache.hits[id] {
+		t.Errorf("negative cache should not be written on DB error")
+	}
 }
