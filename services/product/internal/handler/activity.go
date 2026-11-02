@@ -42,19 +42,19 @@ type createActivityRequest struct {
 func (h *ActivityHandler) Create(c *gin.Context) {
 	var req createActivityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c.Writer, errs.New(errs.CodeInvalidParam, "invalid param", http.StatusBadRequest))
+		response.Fail(c.Writer, errs.New(errs.CodeActivityInvalid, "invalid activity", http.StatusBadRequest))
 		return
 	}
 
 	start, err := time.Parse(time.RFC3339, req.StartTime)
 	if err != nil {
-		response.Fail(c.Writer, errs.New(errs.CodeInvalidParam, "invalid start_time", http.StatusBadRequest))
+		response.Fail(c.Writer, errs.New(errs.CodeActivityInvalid, "invalid start_time", http.StatusBadRequest))
 		return
 	}
 
 	end, err := time.Parse(time.RFC3339, req.EndTime)
 	if err != nil {
-		response.Fail(c.Writer, errs.New(errs.CodeInvalidParam, "invalid end_time", http.StatusBadRequest))
+		response.Fail(c.Writer, errs.New(errs.CodeActivityInvalid, "invalid end_time", http.StatusBadRequest))
 		return
 	}
 
@@ -77,7 +77,7 @@ func (h *ActivityHandler) Create(c *gin.Context) {
 func (h *ActivityHandler) GetByID(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.Fail(c.Writer, errs.New(errs.CodeInvalidParam, "invalid id", http.StatusBadRequest))
+		response.Fail(c.Writer, errs.New(errs.CodeActivityInvalid, "invalid id", http.StatusBadRequest))
 		return
 	}
 	a, err := h.svc.GetByID(c.Request.Context(), id)

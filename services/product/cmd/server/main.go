@@ -68,7 +68,7 @@ func run() error {
 	activityRepo := repository.NewMySQLActivityRepository(conn)
 
 	productSvc := service.NewProductService(cachedProductRepo)
-	activitySvc := service.NewActivityService(productRepo, activityRepo)
+	activitySvc := service.NewActivityService(productRepo, activityRepo, time.Now)
 
 	router := handler.NewRouter(
 		handler.NewProductHandler(productSvc),

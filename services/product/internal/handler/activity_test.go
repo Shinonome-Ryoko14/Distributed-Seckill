@@ -72,8 +72,8 @@ func TestCreateActivityInvalidJSON(t *testing.T) {
 	r := newActivityTestRouter(fake)
 
 	status, resp := doRequest(t, r, http.MethodPost, "/api/v1/activities", `{`)
-	if status != http.StatusBadRequest || resp.Code != errs.CodeInvalidParam {
-		t.Fatalf("status=%d code=%d, want 400/%d", status, resp.Code, errs.CodeInvalidParam)
+	if status != http.StatusBadRequest || resp.Code != errs.CodeActivityInvalid {
+		t.Fatalf("status=%d code=%d, want 400/%d", status, resp.Code, errs.CodeActivityInvalid)
 	}
 	if fake.createCalls != 0 {
 		t.Errorf("svc.Create called %d times, want 0", fake.createCalls)
@@ -86,8 +86,8 @@ func TestCreateActivityInvalidTime(t *testing.T) {
 
 	body := `{"product_id":1,"seckill_stock":10,"seckill_price":500,"start_time":"not-a-time","end_time":"2026-10-17T12:00:00Z","status":1}`
 	status, resp := doRequest(t, r, http.MethodPost, "/api/v1/activities", body)
-	if status != http.StatusBadRequest || resp.Code != errs.CodeInvalidParam {
-		t.Fatalf("status=%d code=%d, want 400/%d", status, resp.Code, errs.CodeInvalidParam)
+	if status != http.StatusBadRequest || resp.Code != errs.CodeActivityInvalid {
+		t.Fatalf("status=%d code=%d, want 400/%d", status, resp.Code, errs.CodeActivityInvalid)
 	}
 	if fake.createCalls != 0 {
 		t.Errorf("svc.Create called %d times, want 0", fake.createCalls)
@@ -140,7 +140,7 @@ func TestGetActivityInvalidID(t *testing.T) {
 	r := newActivityTestRouter(&fakeActivityService{})
 
 	status, resp := doRequest(t, r, http.MethodGet, "/api/v1/activities/abc", "")
-	if status != http.StatusBadRequest || resp.Code != errs.CodeInvalidParam {
-		t.Fatalf("status=%d code=%d, want 400/%d", status, resp.Code, errs.CodeInvalidParam)
+	if status != http.StatusBadRequest || resp.Code != errs.CodeActivityInvalid {
+		t.Fatalf("status=%d code=%d, want 400/%d", status, resp.Code, errs.CodeActivityInvalid)
 	}
 }

@@ -25,11 +25,12 @@ type CreateActivityInput struct {
 type ActivityService struct {
 	products   repository.ProductRepository
 	activities repository.ActivityRepository
+	now        func() time.Time
 }
 
-// NewActivityService 构造 ActivityService，注入商品与活动数据访问依赖。
-func NewActivityService(products repository.ProductRepository, activities repository.ActivityRepository) *ActivityService {
-	return &ActivityService{products: products, activities: activities}
+// NewActivityService 构造 ActivityService，注入商品与活动数据访问依赖和时钟依赖。
+func NewActivityService(products repository.ProductRepository, activities repository.ActivityRepository, now func() time.Time) *ActivityService {
+	return &ActivityService{products: products, activities: activities, now: now}
 }
 
 // Create 校验入参并创建秒杀活动，返回新活动 ID。
@@ -41,7 +42,9 @@ func (s *ActivityService) Create(ctx context.Context, in CreateActivityInput) (u
 	if p == nil {
 		return 0, errs.New(errs.CodeProductNotFound, "product not found", http.StatusNotFound)
 	}
-	err = validateCreateActivity(in, p)
+
+	now := s.now()
+	err = validateCreateActivity(in, p, now)
 	if err != nil {
 		return 0, err
 	}
@@ -60,9 +63,12 @@ func (s *ActivityService) Create(ctx context.Context, in CreateActivityInput) (u
 	return id, nil
 }
 
-func validateCreateActivity(in CreateActivityInput, p *model.Product) error {
+func validateCreateActivity(in CreateActivityInput, p *model.Product, now time.Time) error {
 	stock := in.SeckillStock
 	price := in.SeckillPrice
+	if p.Status != model.StatusOnSale {
+		return errs.New(errs.CodeActivityInvalid, "product is not on sale", http.StatusBadRequest)
+	}
 	if stock == 0 {
 		return errs.New(errs.CodeActivityInvalid, "invalid seckill stock", http.StatusBadRequest)
 	}
@@ -79,6 +85,26 @@ func validateCreateActivity(in CreateActivityInput, p *model.Product) error {
 	}
 	switch in.Status {
 	case model.ActivityStatusPending, model.ActivityStatusActive, model.ActivityStatusCompleted:
+	default:
+		return errs.New(errs.CodeActivityInvalid, "invalid activity status", http.StatusBadRequest)
+	}
+	return validateActivityStatusTime(in, now)
+}
+
+func validateActivityStatusTime(in CreateActivityInput, now time.Time) error {
+	switch in.Status {
+	case model.ActivityStatusPending:
+		if !now.Before(in.StartTime) {
+			return errs.New(errs.CodeActivityInvalid, "activity status is not pending", http.StatusBadRequest)
+		}
+	case model.ActivityStatusActive:
+		if now.Before(in.StartTime) || !now.Before(in.EndTime) {
+			return errs.New(errs.CodeActivityInvalid, "activity status is not active", http.StatusBadRequest)
+		}
+	case model.ActivityStatusCompleted:
+		if now.Before(in.EndTime) {
+			return errs.New(errs.CodeActivityInvalid, "activity status is not completed", http.StatusBadRequest)
+		}
 	default:
 		return errs.New(errs.CodeActivityInvalid, "invalid activity status", http.StatusBadRequest)
 	}

@@ -41,7 +41,7 @@ type createProductRequest struct {
 func (h *ProductHandler) Create(c *gin.Context) {
 	var req createProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Fail(c.Writer, errs.New(errs.CodeInvalidParam, "invalid param", http.StatusBadRequest))
+		response.Fail(c.Writer, errs.New(errs.CodeProductInvalid, "invalid product", http.StatusBadRequest))
 		return
 	}
 
@@ -62,7 +62,7 @@ func (h *ProductHandler) Create(c *gin.Context) {
 func (h *ProductHandler) GetByID(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.Fail(c.Writer, errs.New(errs.CodeInvalidParam, "invalid id", http.StatusBadRequest))
+		response.Fail(c.Writer, errs.New(errs.CodeProductInvalid, "invalid id", http.StatusBadRequest))
 		return
 	}
 

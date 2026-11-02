@@ -4,12 +4,12 @@
 
 ## 当前状态（最高读取权重 · 开工锚点）
 
-- **当前里程碑**: A — 同步直连全链路（每域一服务，W1–W3）
-- **当前任务**: product 活动主数据接口已落地（`services/product/*`：model/repo/service + Gin handler/router/main，活动域错误码 20003/20004，service/handler 单测，导出符号注释齐全）；`make lint && make test && make build` 全绿
-- **上次会话结束点**: 2026-10-17 完成 product 活动主数据接口（POST/GET activities、RFC3339 时间边界解析、先查 product 再校验、补 13 处导出注释）；此前（2026-10-10）product 商品接口、（2026-10-04）user 注册/登录全链路
-- **下一步**: 进入 W2：实现 product 商品详情缓存（Cache Aside + TTL + 空值防穿透）
+- **当前里程碑**: A — 同步直连全链路（每域一服务，W1–W3）；W1 基础接口与 W2 商品缓存子项已完成，W2 秒杀/订单部分尚未开始
+- **当前任务**: 2026-10-30 代码审查高优先级修复进行中：活动创建校验（商品上架 + status/时间自洽）与 product/activity 错误码归域已完成；`make lint && make test && make build` 全绿
+- **上次会话结束点**: 2026-10-30 完成缓存文档收口；2026-11-02 已完成活动创建校验与错误码归域（待提交）。缓存实现最后提交为 `b534087`（2026-10-26）
+- **下一步**: 修复剩余高优先级项：Makefile/应用 DSN 统一与安全拼接（含超时）、`POST /products` 与 `POST /activities` 鉴权；随后处理 Redis `MaxRetries`/快速失败，再进入 W2 秒杀接口 + 订单同步直建 + DB 条件更新防超卖
 - **范围基线**: 里程碑 C 采用「最小可信集」（ADR-0011）；A/B 做透，目标 **2026-11 底–12 月中收口**，2027-01–06 做第二个 Agent 项目
-- **阻塞**: 无
+- **阻塞**: 无硬阻塞；有代码审查待修复项（见下）
 
 ## 影响分级图例
 
@@ -22,6 +22,8 @@
 ## 里程碑
 
 - [ ] **A 同步直连全链路（每域一服务，W1–W3）**：数据模型、用户/商品/活动、DB 防超卖、一人一单、超时取消+回补、v0 基线压测
+  - 已完成：W1 用户/商品/活动基础接口；W2 商品详情缓存（ADR-0012）
+  - 待完成：W2 秒杀接口/订单同步直建/DB 条件更新防超卖/一人一单；W3 超时取消+回补、v0 基线压测
 - [ ] **B 网关+异步削峰（W4–W6）**：gateway、Lua 原子门+预热、Kafka 异步建单、幂等/DLQ、限流
 - [ ] **C 工程化+压测（W7–W8）**：docker-compose、Prometheus/Grafana、CI、k6 优化、故障注入、报告
   - 交付范围按 **ADR-0011 最小可信集**收口（Grafana 多面板/多轮调优/面试题清单后置）
@@ -47,12 +49,33 @@
 | 2026-10-04 | A | 用户注册/登录 + JWT：model/repo/service + Gin handler/router/main 装配、handler/service 单测、E2E curl 冒烟 | 完成 | L | `services/user/**`、`go.mod`、`go.sum`、`docs/PROGRESS.md` |
 | 2026-10-10 | A | product 商品主数据接口：model/repo/service + Gin router/main、分页、商品域错误码 20001/20002、handler/service 单测、E2E 冒烟 | 完成 | L | `services/product/**`、`internal/errs/errs.go`、`docs/PROGRESS.md` |
 | 2026-10-17 | A | product 活动主数据接口：POST/GET activities、活动域错误码 20003/20004、RFC3339 时间解析、先查 product 再校验、handler/service 单测、补 13 处导出注释 | 完成 | L | `services/product/**`、`internal/errs/errs.go`、`docs/PROGRESS.md` |
+| 2026-10-20–26 | A | Redis 客户端 + product 商品详情缓存：Cache Aside、负缓存、Redis 故障降级、TTL 配置、单测与 main 装配 | 完成 | L | `internal/rediscli/**`、`internal/config/**`、`services/product/**`、`go.mod`、`go.sum`、`deploy/.env.example` |
+| 2026-10-30 | A | 代码审查（缓存更新范围外）：记录活动校验/错误码/配置/Redis 重试等待修复项，未改业务代码 | 完成 | S | `docs/PROGRESS.md` |
+| 2026-10-30 | A | 文档收口：补 ADR-0012（缓存）与 ADR-0013（库存写入边界）、更新 PROGRESS 状态/日志、补 README 最小启动与文档索引、补服务端口注释 | 完成 | M | `docs/PROGRESS.md`、`docs/DECISIONS.md`、`README.md`、`harness_project.md`、`deploy/.env.example` |
+| 2026-11-02 | A | 活动创建校验：商品必须上架、`status` 与 `start/end` 时间自洽（pending/active/completed 边界），注入时钟依赖并补 service 单测 | 完成 | M | `services/product/internal/service/activity.go`、`activity_test.go`、`services/product/cmd/server/main.go` |
+| 2026-11-02 | A | 错误码归域：product/activity handler 的 JSON/路径参数错误改用商品域 `20002`、活动域 `20004`，更新单测与 ADR-0010 | 完成 | M | `services/product/internal/handler/{product,activity}.go`、`{product,activity}_test.go`、`internal/errs/errs.go`、`docs/DECISIONS.md` |
 
 ## 已知问题 / 待办池
 
 - 本机原生 MySQL 占用 3306，compose 使用 3307（ADR-0007）。
 - 工具链已装（`make tools`）：golangci-lint `v2.12.2` / goimports `v0.49.0` / golang-migrate `v4.19.1`。**注意**：golangci-lint `v2.13+` 要求 Go ≥1.26，当前 Go 为 1.25.0，故钉在 v2.12.2；k6/wrk 到里程碑 C。
 - MySQL 的 `--` 行注释**后面必须跟空格**（`--bcrypt...` 会报 1064 语法错）。
-- 应用配置走环境变量（见 `internal/config`）：`HTTP_ADDR`（默认 `:8080`，各服务需自行覆盖，如 user `:8081`）、`MYSQL_HOST/PORT/DATABASE/USER/PASSWORD`（密码缺省回退 `MYSQL_ROOT_PASSWORD`，亦可用 `MYSQL_DSN` 整体覆盖）、`JWT_SECRET`（必填）/`JWT_TTL`/`JWT_ISSUER`、`LOG_FORMAT`/`LOG_LEVEL`。`config.Load()` 默认 best-effort 加载 `deploy/.env`（`ENV_FILE` 可改），已有环境变量优先；本地 `deploy/.env` 已补 `JWT_SECRET`。
+- 应用配置走环境变量（见 `internal/config`）：`HTTP_ADDR`（默认 `:8080`，各服务需自行覆盖，如 user `:8081`）、`MYSQL_HOST/PORT/DATABASE/USER/PASSWORD`（密码缺省回退 `MYSQL_ROOT_PASSWORD`，亦可用 `MYSQL_DSN` 整体覆盖）、`JWT_SECRET`（当前共享加载必填，product 也被迫要求，待解耦）/`JWT_TTL`/`JWT_ISSUER`、`LOG_FORMAT`/`LOG_LEVEL`、`PRODUCT_CACHE_TTL`/`PRODUCT_CACHE_NULL_TTL`。`config.Load()` 默认 best-effort 加载 `deploy/.env`（`ENV_FILE` 可改），已有环境变量优先；本地 `deploy/.env` 已补 `JWT_SECRET`。
 - 迁移失败会把 `schema_migrations` 置为 dirty：若失败发生在首个 DDL 且未建任何业务表，直接 `DROP TABLE schema_migrations;` 后重跑 `make migrate`；`make migrate-force V=<上一版本>` 可用于已知版本的恢复（勿用 `V=0`，它会被当成真实版本）。
-- repository 层暂无自动化测试（单测使用 fake repo），真实 SQL 依赖 E2E 冒烟；活动接口的「预热触发」按计划后置到里程碑 B，活动 status 与 start/end 时间自洽校验暂未做。
+- product repository 已有 Cache Aside 装饰器单测（fake cache），真实 SQL 与真实 Redis 序列化仍依赖 E2E，尚未接入 testcontainers/miniredis；活动接口的「预热触发」按计划后置到里程碑 B。
+- 缓存只完成了「穿透」防护（负缓存）；「击穿」（singleflight/逻辑过期）与「雪崩」（TTL 抖动）计划在压测前补齐，见 ADR-0012「影响与后续」。
+- Redis 客户端当前为 300ms IO 超时，但未显式设置 `MaxRetries`；go-redis 默认 3 次重试，故障时可能放大请求延迟，待加 `MaxRetries`/快速失败/熔断。
+
+### 代码审查待修复（2026-10-30，2026-11-02 更新）
+
+> 2026-11-02 已修复活动创建校验与错误码跨域；以下为剩余项，由用户自行修复后再进入下一阶段。
+
+- **高**：`POST /products`、`POST /activities` 当前无鉴权（`services/product/internal/handler/router.go`）；活动创建校验已于 2026-11-02 修复。
+- **高**：Makefile 使用 `MYSQL_DB` / `mysql://` 形式的 `MYSQL_DSN`，应用使用 `MYSQL_DATABASE` / go-sql-driver DSN；修改库名或设置 `MYSQL_DSN` 前需统一，避免迁移与应用连到不同库/格式。
+- **高**：MySQL DSN 直接字符串拼接，密码含 `@`、`:`、`/` 时可能解析错误；且 DSN 无连接/读写超时，启动 Ping 使用 `context.Background()`。
+- **中**：登录对「用户不存在/密码错误」返回不同错误码，存在用户名枚举；`User.PasswordHash` 未加 `json:"-"`。
+- **中**：`gin.Recovery`/未知路由未走统一响应；`response.Fail` 对内部错误只返回 500、不记录 cause。
+- **中**：配置校验不足：`JWT_TTL<=0`、连接池 `<=0`、`JWT_SECRET` 最小长度未校验。
+- **中**：product 服务因共享 `config.Load()` 被迫要求 `JWT_SECRET`，即使自身不签发/校验 JWT。
+- **中**：ADR-0002「只有 order 写 `seckill_stock`」与 product 创建活动时写入初始库存存在语义冲突，已在 **ADR-0013** 明确「product 只在创建时写初始值，order 只负责运行时扣减/回补」；代码注释/表注释按此口径补齐。
+- **低**：分页 `(page-1)*size` 可能溢出；`loc=Local` 依赖宿主机时区；`_ = err` 若干处未按规范注释；README 已补最小启动/文档索引，API 文档仍待后续补。

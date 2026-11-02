@@ -14,6 +14,7 @@ type Code int
 const (
 	CodeOK Code = 0
 
+	// CodeInvalidParam 属于用户域，product 服务必须用2xxxx 号段。
 	CodeInvalidParam  Code = 10001
 	CodeUserExists    Code = 10002
 	CodeUserNotFound  Code = 10003

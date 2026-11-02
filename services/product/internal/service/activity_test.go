@@ -19,7 +19,20 @@ type fakeActivityRepo struct {
 	getErr      error
 }
 
-var _ repository.ActivityRepository = (*fakeActivityRepo)(nil)
+var (
+	_        repository.ActivityRepository = (*fakeActivityRepo)(nil)
+	fixedNow                               = time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC)
+)
+
+func newTestActivityService(
+	products *fakeProductRepo,
+	activities *fakeActivityRepo,
+	now time.Time,
+) *ActivityService {
+	return NewActivityService(products, activities, func() time.Time {
+		return now
+	})
+}
 
 func newFakeActivityRepo() *fakeActivityRepo {
 	return &fakeActivityRepo{byID: map[uint64]*model.Activity{}}
@@ -54,7 +67,7 @@ func seedProductWithPrice(repo *fakeProductRepo, id uint64, price uint32) {
 }
 
 func validActivityInput() CreateActivityInput {
-	start := time.Date(2026, 10, 17, 10, 0, 0, 0, time.UTC)
+	start := fixedNow.Add(time.Hour)
 	return CreateActivityInput{
 		ProductID:    1,
 		SeckillStock: 10,
@@ -69,7 +82,7 @@ func TestActivityCreateSuccess(t *testing.T) {
 	products := newFakeProductRepo()
 	seedProductWithPrice(products, 1, 1000)
 	activities := newFakeActivityRepo()
-	svc := NewActivityService(products, activities)
+	svc := newTestActivityService(products, activities, fixedNow)
 
 	id, err := svc.Create(context.Background(), validActivityInput())
 	if err != nil {
@@ -108,7 +121,7 @@ func TestActivityCreateInvalidParam(t *testing.T) {
 			products := newFakeProductRepo()
 			seedProductWithPrice(products, 1, 1000)
 			activities := newFakeActivityRepo()
-			svc := NewActivityService(products, activities)
+			svc := newTestActivityService(products, activities, fixedNow)
 
 			_, err := svc.Create(context.Background(), tc.in)
 			if got := appErrCode(t, err); got != errs.CodeActivityInvalid {
@@ -121,10 +134,80 @@ func TestActivityCreateInvalidParam(t *testing.T) {
 	}
 }
 
+func TestActivityCreateStatusTime(t *testing.T) {
+	start := fixedNow.Add(time.Hour)
+	end := start.Add(2 * time.Hour)
+	base := validActivityInput()
+
+	cases := []struct {
+		name    string
+		now     time.Time
+		status  model.ActivityStatus
+		wantErr bool
+	}{
+		{"pending future", fixedNow, model.ActivityStatusPending, false},
+		{"pending at start", start, model.ActivityStatusPending, true},
+		{"pending after start", start.Add(time.Minute), model.ActivityStatusPending, true},
+		{"active at start", start, model.ActivityStatusActive, false},
+		{"active inside", start.Add(time.Hour), model.ActivityStatusActive, false},
+		{"active before start", fixedNow, model.ActivityStatusActive, true},
+		{"active at end", end, model.ActivityStatusActive, true},
+		{"completed at end", end, model.ActivityStatusCompleted, false},
+		{"completed after end", end.Add(time.Minute), model.ActivityStatusCompleted, false},
+		{"completed before end", end.Add(-time.Minute), model.ActivityStatusCompleted, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			products := newFakeProductRepo()
+			seedProductWithPrice(products, 1, 1000)
+			activities := newFakeActivityRepo()
+			svc := newTestActivityService(products, activities, tc.now)
+
+			in := base
+			in.Status = tc.status
+			_, err := svc.Create(context.Background(), in)
+
+			if tc.wantErr {
+				if got := appErrCode(t, err); got != errs.CodeActivityInvalid {
+					t.Errorf("Create() code = %d, want %d", got, errs.CodeActivityInvalid)
+				}
+				if activities.createCalls != 0 {
+					t.Errorf("repo.createCalls = %d, want 0", activities.createCalls)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Create() error = %v, want nil", err)
+			}
+			if activities.createCalls != 1 {
+				t.Errorf("repo.createCalls = %d, want 1", activities.createCalls)
+			}
+		})
+	}
+}
+
+func TestActivityCreateProductOffShelf(t *testing.T) {
+	products := newFakeProductRepo()
+	seedProductWithPrice(products, 1, 1000)
+	products.byID[1].Status = model.StatusOffShelf
+	activities := newFakeActivityRepo()
+	svc := newTestActivityService(products, activities, fixedNow)
+
+	_, err := svc.Create(context.Background(), validActivityInput())
+	if got := appErrCode(t, err); got != errs.CodeActivityInvalid {
+		t.Errorf("Create() code = %d, want %d", got, errs.CodeActivityInvalid)
+	}
+	if activities.createCalls != 0 {
+		t.Errorf("repo.createCalls = %d, want 0", activities.createCalls)
+	}
+}
+
 func TestActivityCreateProductNotFound(t *testing.T) {
 	products := newFakeProductRepo()
 	activities := newFakeActivityRepo()
-	svc := NewActivityService(products, activities)
+	svc := newTestActivityService(products, activities, fixedNow)
 
 	in := validActivityInput()
 	in.ProductID = 999
@@ -144,7 +227,7 @@ func TestActivityCreateRepoError(t *testing.T) {
 	repoErr := errors.New("insert failed")
 	activities := newFakeActivityRepo()
 	activities.createErr = repoErr
-	svc := NewActivityService(products, activities)
+	svc := newTestActivityService(products, activities, fixedNow)
 
 	_, err := svc.Create(context.Background(), validActivityInput())
 	if !errors.Is(err, repoErr) {
@@ -153,7 +236,7 @@ func TestActivityCreateRepoError(t *testing.T) {
 }
 
 func TestActivityGetByIDNotFound(t *testing.T) {
-	svc := NewActivityService(newFakeProductRepo(), newFakeActivityRepo())
+	svc := newTestActivityService(newFakeProductRepo(), newFakeActivityRepo(), fixedNow)
 
 	_, err := svc.GetByID(context.Background(), 999)
 	if got := appErrCode(t, err); got != errs.CodeActivityNotFound {
@@ -164,7 +247,7 @@ func TestActivityGetByIDNotFound(t *testing.T) {
 func TestActivityGetByIDSuccess(t *testing.T) {
 	activities := newFakeActivityRepo()
 	activities.byID[1] = &model.Activity{ID: 1, ProductID: 1}
-	svc := NewActivityService(newFakeProductRepo(), activities)
+	svc := newTestActivityService(newFakeProductRepo(), activities, fixedNow)
 
 	a, err := svc.GetByID(context.Background(), 1)
 	if err != nil {

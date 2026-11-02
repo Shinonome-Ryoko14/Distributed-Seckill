@@ -91,8 +91,8 @@ func TestCreateInvalidJSON(t *testing.T) {
 	r := newTestRouter(fake)
 
 	status, resp := doRequest(t, r, http.MethodPost, "/api/v1/products", `{`)
-	if status != http.StatusBadRequest || resp.Code != errs.CodeInvalidParam {
-		t.Fatalf("status=%d code=%d, want 400/%d", status, resp.Code, errs.CodeInvalidParam)
+	if status != http.StatusBadRequest || resp.Code != errs.CodeProductInvalid {
+		t.Fatalf("status=%d code=%d, want 400/%d", status, resp.Code, errs.CodeProductInvalid)
 	}
 	if fake.createCalls != 0 {
 		t.Errorf("svc.Create called %d times, want 0", fake.createCalls)
@@ -115,8 +115,8 @@ func TestGetByIDInvalidParam(t *testing.T) {
 	r := newTestRouter(&fakeProductService{})
 
 	status, resp := doRequest(t, r, http.MethodGet, "/api/v1/products/abc", "")
-	if status != http.StatusBadRequest || resp.Code != errs.CodeInvalidParam {
-		t.Fatalf("status=%d code=%d, want 400/%d", status, resp.Code, errs.CodeInvalidParam)
+	if status != http.StatusBadRequest || resp.Code != errs.CodeProductInvalid {
+		t.Fatalf("status=%d code=%d, want 400/%d", status, resp.Code, errs.CodeProductInvalid)
 	}
 }
 
