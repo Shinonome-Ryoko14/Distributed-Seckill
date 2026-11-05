@@ -19,9 +19,15 @@ MIGRATE := $(BIN_DIR)/migrate
 
 MYSQL_HOST ?= 127.0.0.1
 MYSQL_PORT ?= 3307
-MYSQL_DB ?= seckill
+MYSQL_DATABASE ?= seckill
+MYSQL_PASSWORD ?= $(MYSQL_ROOT_PASSWORD)
 MYSQL_USER ?= root
-MYSQL_DSN ?= mysql://$(MYSQL_USER):$(MYSQL_ROOT_PASSWORD)@tcp($(MYSQL_HOST):$(MYSQL_PORT))/$(MYSQL_DB)
+
+ifeq ($(strip $(MYSQL_DSN)),)
+	MYSQL_DSN := $(MYSQL_USER):$(MYSQL_PASSWORD)@tcp($(MYSQL_HOST):$(MYSQL_PORT))/$(MYSQL_DATABASE)
+endif
+
+MIGRATE_DSN := mysql://$(patsubst mysql://%,%,$(MYSQL_DSN))
 
 COMPOSE := docker compose -f deploy/docker-compose.yml --env-file deploy/.env
 
@@ -54,16 +60,16 @@ ps: ## 查看 compose 容器状态
 	$(COMPOSE) ps
 
 migrate: ## 执行 migrations 到最新版本
-	@test -n "$(MYSQL_ROOT_PASSWORD)" || { echo "MYSQL_ROOT_PASSWORD 未设置：请在 deploy/.env 中配置" >&2; exit 1; }
-	@$(MIGRATE) -path migrations -database "$(MYSQL_DSN)" up
+	@test -n "$(MYSQL_PASSWORD)" || { echo "MYSQL_PASSWORD 未设置：请在 deploy/.env 中配置" >&2; exit 1; }
+	@$(MIGRATE) -path migrations -database "$(MIGRATE_DSN)" up
 
 migrate-down: ## 回滚一个迁移版本
-	@test -n "$(MYSQL_ROOT_PASSWORD)" || { echo "MYSQL_ROOT_PASSWORD 未设置：请在 deploy/.env 中配置" >&2; exit 1; }
-	@$(MIGRATE) -path migrations -database "$(MYSQL_DSN)" down 1
+	@test -n "$(MYSQL_PASSWORD)" || { echo "MYSQL_PASSWORD 未设置：请在 deploy/.env 中配置" >&2; exit 1; }
+	@$(MIGRATE) -path migrations -database "$(MIGRATE_DSN)" down 1
 
 migrate-force: ## 强制设置迁移版本并清除 dirty，用法：make migrate-force V=0
 	@test -n "$(V)" || { echo "用法: make migrate-force V=0" >&2; exit 1; }
-	@$(MIGRATE) -path migrations -database "$(MYSQL_DSN)" force $(V)
+	@$(MIGRATE) -path migrations -database "$(MIGRATE_DSN)" force $(V)
 
 migrate-create: ## 新建迁移，用法：make migrate-create NAME=create_orders
 	@test -n "$(NAME)" || { echo "用法: make migrate-create NAME=create_orders" >&2; exit 1; }

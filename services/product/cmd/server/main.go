@@ -41,7 +41,9 @@ func run() error {
 		return fmt.Errorf("load product cache config: %w", err)
 	}
 
-	conn, err := db.Open(context.Background(), cfg.MySQL)
+	openCtx, cancelOpen := context.WithTimeout(context.Background(), 5*time.Second)
+	conn, err := db.Open(openCtx, cfg.MySQL)
+	cancelOpen()
 	if err != nil {
 		return fmt.Errorf("open db: %w", err)
 	}

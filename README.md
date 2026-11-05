@@ -36,6 +36,8 @@ make up
 make migrate
 ```
 
+MySQL 配置：默认由 `MYSQL_HOST/PORT/DATABASE/USER/PASSWORD` 组合，密码缺省回退 `MYSQL_ROOT_PASSWORD`；也可用 `MYSQL_DSN` 整体覆盖（go-sql-driver 格式，不带 `mysql://`，`make migrate` 会自动补前缀）。连接/读写超时可用 `MYSQL_DIAL_TIMEOUT`（默认 3s）、`MYSQL_READ_TIMEOUT` / `MYSQL_WRITE_TIMEOUT`（默认 5s）调整。
+
 常用检查：
 
 ```bash

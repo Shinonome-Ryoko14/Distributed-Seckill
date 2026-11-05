@@ -161,3 +161,22 @@
   - 活动创建也交给 order：活动主数据与订单域耦合，且与计划 §2.1 的 owner 约定冲突。
   - 独立 Inventory 服务：已列入刻意不做清单。
 - **影响**: 后续代码/表注释应区分「创建时初始化」与「运行时扣减/回补」；对账与审计脚本按 order 服务为唯一运行时写者设计。
+
+## ADR-0014: MySQL 配置与 DSN 格式统一
+
+- **日期**: 2026-11-05
+- **状态**: 已接受
+- **背景**: Makefile 使用 `MYSQL_DB` 和 `mysql://` 形式的 `MYSQL_DSN`，应用使用 `MYSQL_DATABASE` 和 go-sql-driver DSN；迁移与应用可能连到不同库或使用不同格式。旧实现还直接拼接 DSN，缺少连接/读写超时，启动 Ping 使用无 deadline 的 `context.Background()`。
+- **决策**:
+  - 库名统一使用 `MYSQL_DATABASE`，不再使用 `MYSQL_DB`；密码使用 `MYSQL_PASSWORD`，缺省回退 `MYSQL_ROOT_PASSWORD`。
+  - `MYSQL_DSN` 统一为 go-sql-driver 格式（不带 `mysql://`），应用和 Makefile 共用同一份连接信息；`make migrate` 调用 golang-migrate 时自动补 `mysql://` 前缀。
+  - 应用使用 `mysql.NewConfig()` / `FormatDSN()` 生成默认 DSN，使用 `mysql.ParseDSN()` 校验覆盖值；兼容旧的 `mysql://` 覆盖写法（去除前缀后解析）。
+  - 默认超时：连接 `3s`、读/写各 `5s`，可用 `MYSQL_DIAL_TIMEOUT` / `MYSQL_READ_TIMEOUT` / `MYSQL_WRITE_TIMEOUT` 覆盖；启动 `db.Open` 使用 5 秒 context 限制 Ping。
+  - `MYSQL_DSN` 覆盖值缺少超时时补默认值，`parseTime` 强制为 `true`；覆盖值仍需自行保证时区参数符合预期。
+- **理由**: 组件变量是单一事实源，迁移与应用不会因为变量名或 DSN 格式不同而连到不同库；由驱动生成/解析 DSN 比手拼更可控，超时和启动 deadline 避免故障时无限等待。
+- **被否方案**:
+  - 拆分 `MYSQL_DSN`（应用）与 `MYSQL_MIGRATE_DSN`（迁移）：格式隔离清楚，但需要维护两套变量，容易再次不一致。
+  - 继续手拼 DSN：密码含特殊字符、参数遗漏和格式变化时容易出错。
+  - 应用直接接受 `mysql://` 作为规范格式：与 go-sql-driver 原生格式不一致，且迁移与应用仍各自解析。
+  - 不设置超时：故障时请求/启动可能长时间挂起，不利于快速失败。
+- **影响**: `.env.example` / README 需要明确 `MYSQL_DSN` 格式与超时变量；`MYSQL_DSN` 覆盖是专家用法，必须与 `MYSQL_DATABASE` 指向同一库；后续 Redis 重试与连接池参数校验单独处理。

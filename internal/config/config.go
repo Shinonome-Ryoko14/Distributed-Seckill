@@ -3,27 +3,33 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-sql-driver/mysql"
 )
 
 const (
-	defaultHTTPAddr      = ":8080"
-	defaultLogFormat     = "json"
-	defaultLogLevel      = "info"
-	defaultMySQLHost     = "127.0.0.1"
-	defaultMySQLPort     = "3307"
-	defaultMySQLDatabase = "seckill"
-	defaultMySQLUser     = "root"
-	defaultMaxOpenConns  = 20
-	defaultMaxIdleConns  = 10
-	defaultConnMaxLife   = time.Hour
-	defaultJWTTTL        = 24 * time.Hour
-	defaultJWTIssuer     = "distributed-seckill"
-	defaultRedisAddr     = "127.0.0.1:6379"
-	defaultRedisDB       = 0
+	defaultHTTPAddr          = ":8080"
+	defaultLogFormat         = "json"
+	defaultLogLevel          = "info"
+	defaultMySQLHost         = "127.0.0.1"
+	defaultMySQLPort         = "3307"
+	defaultMySQLDatabase     = "seckill"
+	defaultMySQLUser         = "root"
+	defaultMaxOpenConns      = 20
+	defaultMaxIdleConns      = 10
+	defaultConnMaxLife       = time.Hour
+	defaultJWTTTL            = 24 * time.Hour
+	defaultMySQLDialTimeout  = 3 * time.Second
+	defaultMySQLReadTimeout  = 5 * time.Second
+	defaultMySQLWriteTimeout = 5 * time.Second
+	defaultJWTIssuer         = "distributed-seckill"
+	defaultRedisAddr         = "127.0.0.1:6379"
+	defaultRedisDB           = 0
 )
 
 // Config 是全部服务的共享配置，具体服务通过环境变量覆盖默认值。
@@ -94,6 +100,29 @@ func load(lookup func(string) string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	dialTimeout, err := envDuration(lookup, "MYSQL_DIAL_TIMEOUT", defaultMySQLDialTimeout)
+	if err != nil {
+		return nil, err
+	}
+	readTimeout, err := envDuration(lookup, "MYSQL_READ_TIMEOUT", defaultMySQLReadTimeout)
+	if err != nil {
+		return nil, err
+	}
+	writeTimeout, err := envDuration(lookup, "MYSQL_WRITE_TIMEOUT", defaultMySQLWriteTimeout)
+	if err != nil {
+		return nil, err
+	}
+
+	if dialTimeout <= 0 {
+		return nil, fmt.Errorf("MYSQL_DIAL_TIMEOUT must be > 0, got %s", dialTimeout)
+	}
+	if readTimeout <= 0 {
+		return nil, fmt.Errorf("MYSQL_READ_TIMEOUT must be > 0, got %s", readTimeout)
+	}
+	if writeTimeout <= 0 {
+		return nil, fmt.Errorf("MYSQL_WRITE_TIMEOUT must be > 0, got %s", writeTimeout)
+	}
+
 	redisDB, err := envInt(lookup, "REDIS_DB", defaultRedisDB)
 	if err != nil {
 		return nil, err
@@ -111,6 +140,11 @@ func load(lookup func(string) string) (*Config, error) {
 		return nil, fmt.Errorf("JWT_SECRET is required")
 	}
 
+	dsn, err := mysqlDSN(lookup, dialTimeout, readTimeout, writeTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("build mysql dsn: %w", err)
+	}
+
 	cfg := &Config{
 		HTTP: HTTPConfig{
 			Addr: env(lookup, "HTTP_ADDR", defaultHTTPAddr),
@@ -120,7 +154,7 @@ func load(lookup func(string) string) (*Config, error) {
 			Level:  strings.ToLower(env(lookup, "LOG_LEVEL", defaultLogLevel)),
 		},
 		MySQL: MySQLConfig{
-			DSN:             mysqlDSN(lookup),
+			DSN:             dsn,
 			MaxOpenConns:    maxOpen,
 			MaxIdleConns:    maxIdle,
 			ConnMaxLifetime: connMaxLife,
@@ -144,22 +178,60 @@ func load(lookup func(string) string) (*Config, error) {
 	return cfg, nil
 }
 
-func mysqlDSN(lookup func(string) string) string {
-	if dsn := lookup("MYSQL_DSN"); dsn != "" {
-		return dsn
+func mysqlDSN(lookup func(string) string, dialTimeout, readTimeout, writeTimeout time.Duration) (string, error) {
+	if raw := lookup("MYSQL_DSN"); raw != "" {
+		raw = strings.TrimPrefix(raw, "mysql://")
+
+		cfg, err := mysql.ParseDSN(raw)
+		if err != nil {
+			return "", fmt.Errorf("MYSQL_DSN is invalid: %w", err)
+		}
+		if cfg.DBName == "" {
+			return "", fmt.Errorf("MYSQL_DSN must include database name")
+		}
+
+		applyDefaultTimeouts(cfg, dialTimeout, readTimeout, writeTimeout)
+		cfg.ParseTime = true
+		return cfg.FormatDSN(), nil
 	}
+
 	password := lookup("MYSQL_PASSWORD")
 	if password == "" {
 		password = lookup("MYSQL_ROOT_PASSWORD")
 	}
-	return fmt.Sprintf(
-		"%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=true&loc=Local",
-		env(lookup, "MYSQL_USER", defaultMySQLUser),
-		password,
+
+	cfg := mysql.NewConfig()
+	cfg.User = env(lookup, "MYSQL_USER", defaultMySQLUser)
+	cfg.Passwd = password
+	cfg.Net = "tcp"
+	cfg.Addr = net.JoinHostPort(
 		env(lookup, "MYSQL_HOST", defaultMySQLHost),
 		env(lookup, "MYSQL_PORT", defaultMySQLPort),
-		env(lookup, "MYSQL_DATABASE", defaultMySQLDatabase),
 	)
+	cfg.DBName = env(lookup, "MYSQL_DATABASE", defaultMySQLDatabase)
+	cfg.ParseTime = true
+	cfg.Loc = time.Local
+	cfg.Timeout = dialTimeout
+	cfg.ReadTimeout = readTimeout
+	cfg.WriteTimeout = writeTimeout
+	cfg.Params = map[string]string{"charset": "utf8mb4"}
+
+	return cfg.FormatDSN(), nil
+}
+
+func applyDefaultTimeouts(
+	cfg *mysql.Config,
+	dialTimeout, readTimeout, writeTimeout time.Duration,
+) {
+	if cfg.Timeout == 0 {
+		cfg.Timeout = dialTimeout
+	}
+	if cfg.ReadTimeout == 0 {
+		cfg.ReadTimeout = readTimeout
+	}
+	if cfg.WriteTimeout == 0 {
+		cfg.WriteTimeout = writeTimeout
+	}
 }
 
 func env(lookup func(string) string, key, fallback string) string {
