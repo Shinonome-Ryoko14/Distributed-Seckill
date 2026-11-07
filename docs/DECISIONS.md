@@ -127,7 +127,7 @@
   - 读路径采用 Cache Aside：先 `GET`，命中直接返回；未命中或 Redis 读失败回源 MySQL，命中后回填缓存，未找到则写负缓存。
   - 默认 TTL：正常值 5 分钟，负缓存 1 分钟；均可用 `PRODUCT_CACHE_TTL` / `PRODUCT_CACHE_NULL_TTL` 覆盖，并校验负缓存 TTL 不超过正常 TTL。
   - 创建商品后删除对应 key；当前没有商品更新/删除接口，因此暂无其他失效路径。
-  - Redis 只作为缓存，不是商品事实源；Redis 启动 Ping 失败只告警不阻断启动，运行期读失败降级到 MySQL。单次 Redis IO 超时为 300ms。
+  - Redis 只作为缓存，不是商品事实源；Redis 启动 Ping 失败只告警不阻断启动，运行期读失败降级到 MySQL。单次 Redis IO 超时为 300ms，并显式设置 `MaxRetries: -1` 禁用 go-redis 默认的 3 次重试。
 - **理由**:
   - Cache Aside 与现有 repository 分层兼容，改动集中在 `CachedProductRepository` 装饰器，不污染 service/handler。
   - 负缓存用 JSON `null` 可以和正常值共用同一序列化路径，避免引入额外的哨兵值约定。
@@ -141,7 +141,7 @@
   - 逻辑过期 / singleflight：W2 基线只要求穿透防护，击穿与雪崩留到压测前补齐，不在本次强行引入。
 - **影响与后续**:
   - 当前只解决穿透；击穿（singleflight/逻辑过期）与雪崩（TTL 随机抖动）待压测前实现。
-  - 300ms IO 超时 + go-redis 默认重试可能在 Redis 故障时放大延迟，后续需显式设置 `MaxRetries`、快速失败/熔断，并对缓存告警日志采样。
+  - 快速失败已落地：300ms IO 超时 + `MaxRetries: -1`，Redis 故障时单次缓存操作最多约 300ms 后降级回源 MySQL；熔断/告警日志采样仍待压测前补充。
   - 真实 Redis 序列化（尤其负缓存 `null`）尚无自动化测试，后续补 miniredis 或 testcontainers 集成测试。
   - Key 暂时没有版本前缀；若 `model.Product` JSON 结构发生不兼容变更，需要加 `v1` 前缀或缩短 TTL 过渡。
   - 新增商品更新/删除接口时，必须同步补缓存失效路径。

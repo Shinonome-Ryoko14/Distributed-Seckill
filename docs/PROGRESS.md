@@ -5,9 +5,9 @@
 ## 当前状态（最高读取权重 · 开工锚点）
 
 - **当前里程碑**: A — 同步直连全链路（每域一服务，W1–W3）；W1 基础接口与 W2 商品缓存子项已完成，W2 秒杀/订单部分尚未开始
-- **当前任务**: MySQL 配置/DSN 统一改造完成（ADR-0014）；`make lint && make test && make build` 全绿
-- **上次会话结束点**: 2026-11-05 完成 MySQL 配置/DSN 统一改造（Makefile、`internal/config`、两个 `main.go`、单测），已通过 lint/test/build，待提交
-- **下一步**: 处理 Redis `MaxRetries`/快速失败；随后做 `POST /products`、`POST /activities` 鉴权，最后进入 W2 秒杀接口 + 订单同步直建 + DB 条件更新防超卖
+- **当前任务**: Redis 客户端快速失败改造完成（ADR-0012 更新）；`make lint && make test && make build` 全绿
+- **上次会话结束点**: 2026-11-07 完成 Redis `MaxRetries: -1` 快速失败与客户端配置单测，已通过 lint/test/build，待提交
+- **下一步**: 做 `POST /products`、`POST /activities` 鉴权，然后进入 W2 秒杀接口 + 订单同步直建 + DB 条件更新防超卖
 - **范围基线**: 里程碑 C 采用「最小可信集」（ADR-0011）；A/B 做透，目标 **2026-11 底–12 月中收口**，2027-01–06 做第二个 Agent 项目
 - **阻塞**: 无硬阻塞；有代码审查待修复项（见下）
 
@@ -55,6 +55,7 @@
 | 2026-11-02 | A | 活动创建校验：商品必须上架、`status` 与 `start/end` 时间自洽（pending/active/completed 边界），注入时钟依赖并补 service 单测 | 完成 | M | `services/product/internal/service/activity.go`、`activity_test.go`、`services/product/cmd/server/main.go` |
 | 2026-11-02 | A | 错误码归域：product/activity handler 的 JSON/路径参数错误改用商品域 `20002`、活动域 `20004`，更新单测与 ADR-0010 | 完成 | M | `services/product/internal/handler/{product,activity}.go`、`{product,activity}_test.go`、`internal/errs/errs.go`、`docs/DECISIONS.md` |
 | 2026-11-05 | A | MySQL 配置/DSN 统一：`MYSQL_DATABASE`、单一 `MYSQL_DSN`、驱动生成 DSN、连接/读写超时、启动 Ping deadline；ADR-0014 | 完成 | M | `Makefile`、`internal/config/config.go`、`config_test.go`、`services/{user,product}/cmd/server/main.go`、`deploy/.env.example`、`README.md`、`docs/DECISIONS.md` |
+| 2026-11-07 | A | Redis 客户端快速失败：显式 `MaxRetries: -1` 禁用 go-redis 默认 3 次重试，保留 300ms IO 超时，补客户端配置单测；更新 ADR-0012 | 完成 | M | `internal/rediscli/redis.go`、`internal/rediscli/redis_test.go`、`docs/DECISIONS.md`、`docs/PROGRESS.md` |
 
 ## 已知问题 / 待办池
 
@@ -65,7 +66,6 @@
 - 迁移失败会把 `schema_migrations` 置为 dirty：若失败发生在首个 DDL 且未建任何业务表，直接 `DROP TABLE schema_migrations;` 后重跑 `make migrate`；`make migrate-force V=<上一版本>` 可用于已知版本的恢复（勿用 `V=0`，它会被当成真实版本）。
 - product repository 已有 Cache Aside 装饰器单测（fake cache），真实 SQL 与真实 Redis 序列化仍依赖 E2E，尚未接入 testcontainers/miniredis；活动接口的「预热触发」按计划后置到里程碑 B。
 - 缓存只完成了「穿透」防护（负缓存）；「击穿」（singleflight/逻辑过期）与「雪崩」（TTL 抖动）计划在压测前补齐，见 ADR-0012「影响与后续」。
-- Redis 客户端当前为 300ms IO 超时，但未显式设置 `MaxRetries`；go-redis 默认 3 次重试，故障时可能放大请求延迟，待加 `MaxRetries`/快速失败/熔断。
 
 ### 代码审查待修复（2026-10-30，2026-11-05 更新）
 

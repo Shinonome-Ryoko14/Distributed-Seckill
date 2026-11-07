@@ -23,6 +23,8 @@ func New(cfg config.RedisConfig) *redis.Client {
 		DialTimeout:  ioTimeout,
 		ReadTimeout:  ioTimeout,
 		WriteTimeout: ioTimeout,
+		// -1 才是禁用重试；0 会回落到 go-redis 默认的 3 次。
+		MaxRetries: -1,
 	})
 }
 
