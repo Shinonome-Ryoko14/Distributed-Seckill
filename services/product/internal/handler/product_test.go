@@ -46,9 +46,15 @@ type apiResponse struct {
 	Data    json.RawMessage `json:"data"`
 }
 
+func passThroughAuth(c *gin.Context) {
+	c.Next()
+}
+
 func newTestRouter(fake *fakeProductService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	return NewRouter(NewProductHandler(fake), NewActivityHandler(&fakeActivityService{}))
+	return NewRouter(NewProductHandler(fake),
+		NewActivityHandler(&fakeActivityService{}),
+		passThroughAuth)
 }
 
 func doRequest(t *testing.T, r *gin.Engine, method, path, body string) (int, apiResponse) {

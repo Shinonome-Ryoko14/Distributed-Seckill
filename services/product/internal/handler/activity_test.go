@@ -36,7 +36,9 @@ func (f *fakeActivityService) GetByID(_ context.Context, _ uint64) (*model.Activ
 
 func newActivityTestRouter(fake *fakeActivityService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	return NewRouter(NewProductHandler(&fakeProductService{}), NewActivityHandler(fake))
+	return NewRouter(NewProductHandler(&fakeProductService{}),
+		NewActivityHandler(fake),
+		passThroughAuth)
 }
 
 const validCreateActivityBody = `{"product_id":1,"seckill_stock":10,"seckill_price":500,"start_time":"2026-10-17T10:00:00Z","end_time":"2026-10-17T12:00:00Z","status":1}`

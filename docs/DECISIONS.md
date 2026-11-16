@@ -93,9 +93,10 @@
 - **背景**: 各服务即将各自暴露 HTTP 接口并需要鉴权，若无统一约定会出现响应格式/错误语义/token 载荷不一致，网关与前端难以对接。
 - **决策**:
   - HTTP 统一响应体 `{code, message, data}`：成功 `code=0, message=ok`，`data` 为空时省略；失败由 `internal/errs.AppError` 的 `Code/Message/HTTPStatus` 映射（未知错误统一 `50000/500`，不泄漏内部 cause）。
-  - 错误码分段：`0` 成功；`1xxxx` 用户域（`10001–10004`）；`2xxxx` 商品域（商品 `20001–20002`、活动子域 `20003–20004`）；`5xxxx` 系统域（`50000` 内部错误）。新增服务在业务域内分配独立号段。
+  - 错误码分段：`0` 成功；`1xxxx` 用户域（`10001–10004`）；`2xxxx` 商品域（商品 `20001–20002`、活动子域 `20003–20004`）；`5xxxx` 系统域（`50000` 内部错误、`50001` 未认证）。新增服务在业务域内分配独立号段。
   - 修订（2026-11-02）：handler 的 JSON 解析/路径参数错误也必须使用本域错误码；product 服务中商品接口使用 `20002`、活动接口使用 `20004`，不得复用用户域 `CodeInvalidParam(10001)`。
   - JWT：HS256；载荷含自定义 `uid` 与标准 `sub/iss/iat/exp`；默认 TTL `24h`、issuer `distributed-seckill`；客户端以 `Authorization: Bearer <token>` 传递；服务端校验签名、算法白名单（仅 HS256）、issuer、有效期。
+  - 修订（2026-11-07）：product 的 `POST /api/v1/products`、`POST /api/v1/activities` 通过 `internal/middleware.Auth` 校验 `Authorization: Bearer <token>`；缺失/无效 token 统一返回 HTTP `401` + 业务码 `50001`，`GET` 与 `/healthz` 保持公开。
   - `JWT_SECRET` 必填，仅经环境变量注入，不入库；本地开发密钥放 `deploy/.env`（已 gitignore），`deploy/.env.example` 保留空占位。
 - **理由**: 统一契约便于网关/前端与错误定位；错误码分段可扩展且可读；HS256 单密钥满足"网关统一签发、各服务校验"的形态；显式算法白名单防 alg 混淆类攻击。
 - **被否方案**: 直接返回裸 JSON + HTTP 状态码（错误语义不统一）；RS256 非对称（密钥管理复杂，本项目单网关签发无必要）；把 secret 写死默认值（违反密钥不入库）。

@@ -25,7 +25,8 @@ const (
 	CodeActivityNotFound Code = 20003
 	CodeActivityInvalid  Code = 20004
 
-	CodeInternal Code = 50000
+	CodeInternal     Code = 50000
+	CodeUnauthorized Code = 50001
 )
 
 // AppError 是携带业务码与 HTTP 状态的错误，用于 handler 层统一转换为响应。

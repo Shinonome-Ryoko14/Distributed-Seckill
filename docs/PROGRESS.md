@@ -5,9 +5,9 @@
 ## 当前状态（最高读取权重 · 开工锚点）
 
 - **当前里程碑**: A — 同步直连全链路（每域一服务，W1–W3）；W1 基础接口与 W2 商品缓存子项已完成，W2 秒杀/订单部分尚未开始
-- **当前任务**: Redis 客户端快速失败改造完成（ADR-0012 更新）；`make lint && make test && make build` 全绿
-- **上次会话结束点**: 2026-11-07 完成 Redis `MaxRetries: -1` 快速失败与客户端配置单测，已通过 lint/test/build，待提交
-- **下一步**: 做 `POST /products`、`POST /activities` 鉴权，然后进入 W2 秒杀接口 + 订单同步直建 + DB 条件更新防超卖
+- **当前任务**: product 写接口 JWT 鉴权完成（`POST /products`、`POST /activities`）；`make lint && make test && make build` 全绿
+- **上次会话结束点**: 2026-11-07 完成 product 写接口 JWT 鉴权与 50001 错误码，补中间件/router 测试，已通过 lint/test/build，待提交
+- **下一步**: 进入 W2 秒杀接口 + 订单同步直建 + DB 条件更新防超卖
 - **范围基线**: 里程碑 C 采用「最小可信集」（ADR-0011）；A/B 做透，目标 **2026-11 底–12 月中收口**，2027-01–06 做第二个 Agent 项目
 - **阻塞**: 无硬阻塞；有代码审查待修复项（见下）
 
@@ -56,6 +56,7 @@
 | 2026-11-02 | A | 错误码归域：product/activity handler 的 JSON/路径参数错误改用商品域 `20002`、活动域 `20004`，更新单测与 ADR-0010 | 完成 | M | `services/product/internal/handler/{product,activity}.go`、`{product,activity}_test.go`、`internal/errs/errs.go`、`docs/DECISIONS.md` |
 | 2026-11-05 | A | MySQL 配置/DSN 统一：`MYSQL_DATABASE`、单一 `MYSQL_DSN`、驱动生成 DSN、连接/读写超时、启动 Ping deadline；ADR-0014 | 完成 | M | `Makefile`、`internal/config/config.go`、`config_test.go`、`services/{user,product}/cmd/server/main.go`、`deploy/.env.example`、`README.md`、`docs/DECISIONS.md` |
 | 2026-11-07 | A | Redis 客户端快速失败：显式 `MaxRetries: -1` 禁用 go-redis 默认 3 次重试，保留 300ms IO 超时，补客户端配置单测；更新 ADR-0012 | 完成 | M | `internal/rediscli/redis.go`、`internal/rediscli/redis_test.go`、`docs/DECISIONS.md`、`docs/PROGRESS.md` |
+| 2026-11-07 | A | product 写接口鉴权：新增 `internal/middleware.Auth`，`POST /products`、`POST /activities` 校验 Bearer JWT，未认证统一 401/50001，user_id 注入 ctx；补中间件与路由测试 | 完成 | L | `internal/middleware/auth.go`、`auth_test.go`、`internal/errs/errs.go`、`services/product/internal/handler/router.go`、`router_test.go`、`product_test.go`、`activity_test.go`、`services/product/cmd/server/main.go`、`docs/DECISIONS.md`、`docs/PROGRESS.md` |
 
 ## 已知问题 / 待办池
 
@@ -67,14 +68,12 @@
 - product repository 已有 Cache Aside 装饰器单测（fake cache），真实 SQL 与真实 Redis 序列化仍依赖 E2E，尚未接入 testcontainers/miniredis；活动接口的「预热触发」按计划后置到里程碑 B。
 - 缓存只完成了「穿透」防护（负缓存）；「击穿」（singleflight/逻辑过期）与「雪崩」（TTL 抖动）计划在压测前补齐，见 ADR-0012「影响与后续」。
 
-### 代码审查待修复（2026-10-30，2026-11-05 更新）
+### 代码审查待修复（2026-10-30，2026-11-07 更新）
 
-> 2026-11-02 已修复活动创建校验与错误码跨域；2026-11-05 MySQL 配置/DSN 改造已完成并通过 `make lint && make test && make build`；以下为其他剩余项。
+> 2026-11-02 已修复活动创建校验与错误码跨域；2026-11-05 MySQL 配置/DSN 改造完成；2026-11-07 product 写接口鉴权完成；以下为其他剩余项。
 
-- **高**：`POST /products`、`POST /activities` 当前无鉴权（`services/product/internal/handler/router.go`）；活动创建校验已于 2026-11-02 修复。
 - **中**：登录对「用户不存在/密码错误」返回不同错误码，存在用户名枚举；`User.PasswordHash` 未加 `json:"-"`。
 - **中**：`gin.Recovery`/未知路由未走统一响应；`response.Fail` 对内部错误只返回 500、不记录 cause。
 - **中**：配置校验不足：`JWT_TTL<=0`、连接池 `<=0`、`JWT_SECRET` 最小长度未校验。
-- **中**：product 服务因共享 `config.Load()` 被迫要求 `JWT_SECRET`，即使自身不签发/校验 JWT。
 - **中**：ADR-0002「只有 order 写 `seckill_stock`」与 product 创建活动时写入初始库存存在语义冲突，已在 **ADR-0013** 明确「product 只在创建时写初始值，order 只负责运行时扣减/回补」；代码注释/表注释按此口径补齐。
 - **低**：分页 `(page-1)*size` 可能溢出；`loc=Local` 依赖宿主机时区；`_ = err` 若干处未按规范注释；`Makefile` 的 `migrate-down` 错误提示仍写 `MYSQL_ROOT_PASSWORD`（实际检查 `MYSQL_PASSWORD`），不影响功能；README 已补最小启动/文档索引，API 文档仍待后续补。

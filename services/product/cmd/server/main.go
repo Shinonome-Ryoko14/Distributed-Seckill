@@ -14,7 +14,9 @@ import (
 
 	"github.com/Shinonome-Ryoko14/Distributed-Seckill/internal/config"
 	"github.com/Shinonome-Ryoko14/Distributed-Seckill/internal/db"
+	"github.com/Shinonome-Ryoko14/Distributed-Seckill/internal/jwt"
 	"github.com/Shinonome-Ryoko14/Distributed-Seckill/internal/log"
+	"github.com/Shinonome-Ryoko14/Distributed-Seckill/internal/middleware"
 	"github.com/Shinonome-Ryoko14/Distributed-Seckill/internal/rediscli"
 	productconfig "github.com/Shinonome-Ryoko14/Distributed-Seckill/services/product/internal/config"
 	"github.com/Shinonome-Ryoko14/Distributed-Seckill/services/product/internal/handler"
@@ -72,9 +74,11 @@ func run() error {
 	productSvc := service.NewProductService(cachedProductRepo)
 	activitySvc := service.NewActivityService(productRepo, activityRepo, time.Now)
 
+	jwtManager := jwt.NewManager(cfg.JWT.Secret, cfg.JWT.TTL, cfg.JWT.Issuer)
 	router := handler.NewRouter(
 		handler.NewProductHandler(productSvc),
 		handler.NewActivityHandler(activitySvc),
+		middleware.Auth(jwtManager),
 	)
 
 	srv := &http.Server{
