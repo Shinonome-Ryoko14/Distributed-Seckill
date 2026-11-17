@@ -15,10 +15,16 @@ const (
 	CodeOK Code = 0
 
 	// CodeInvalidParam 属于用户域，product 服务必须用2xxxx 号段。
-	CodeInvalidParam  Code = 10001
-	CodeUserExists    Code = 10002
-	CodeUserNotFound  Code = 10003
+	CodeInvalidParam Code = 10001
+	CodeUserExists   Code = 10002
+	// CodeUserNotFound 已停用：登录不再返回，避免用户名枚举；号段保留，勿复用。
+	// Deprecated: 使用 CodeLoginFailed。
+	CodeUserNotFound Code = 10003
+	// CodePasswordWrong 已停用：登录不再返回，避免用户名枚举；号段保留，勿复用。
+	// Deprecated: 使用 CodeLoginFailed。
 	CodePasswordWrong Code = 10004
+	// CodeLoginFailed 表示登录失败，不区分用户不存在与密码错误。
+	CodeLoginFailed Code = 10005
 
 	CodeProductNotFound  Code = 20001
 	CodeProductInvalid   Code = 20002

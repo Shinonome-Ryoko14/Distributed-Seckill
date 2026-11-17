@@ -3,6 +3,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -27,6 +28,11 @@ func validateCredentials(username, password string) error {
 			http.StatusBadRequest)
 	}
 	return nil
+}
+
+func loginFailed() error {
+	return errs.New(errs.CodeLoginFailed, "invalid username or password",
+		http.StatusUnauthorized)
 }
 
 // UserService 提供用户注册与登录业务。
@@ -63,14 +69,15 @@ func (s *UserService) Login(ctx context.Context, username, password string) (str
 		return "", err
 	}
 	if u == nil {
-		return "", errs.New(errs.CodeUserNotFound, "user not found",
-			http.StatusUnauthorized)
+		return "", loginFailed()
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password))
 	if err != nil {
-		return "", errs.New(errs.CodePasswordWrong, "incorrect password",
-			http.StatusUnauthorized)
+		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			return "", loginFailed()
+		}
+		return "", fmt.Errorf("compare password hash: %w", err)
 	}
 
 	token, err := s.tokens.Generate(u.ID)

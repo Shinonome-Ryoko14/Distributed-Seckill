@@ -167,8 +167,8 @@ func TestLoginUserNotFound(t *testing.T) {
 	svc, _ := newTestService(newFakeUserRepo())
 
 	_, err := svc.Login(context.Background(), "nobody", "secret-password")
-	if got := appErrCode(t, err); got != errs.CodeUserNotFound {
-		t.Errorf("Login() code = %d, want %d", got, errs.CodeUserNotFound)
+	if got := appErrCode(t, err); got != errs.CodeLoginFailed {
+		t.Errorf("Login() code = %d, want %d", got, errs.CodeLoginFailed)
 	}
 }
 
@@ -181,8 +181,30 @@ func TestLoginWrongPassword(t *testing.T) {
 	}
 
 	_, err := svc.Login(context.Background(), "dave", "wrong-password")
-	if got := appErrCode(t, err); got != errs.CodePasswordWrong {
-		t.Errorf("Login() code = %d, want %d", got, errs.CodePasswordWrong)
+	if got := appErrCode(t, err); got != errs.CodeLoginFailed {
+		t.Errorf("Login() code = %d, want %d", got, errs.CodeLoginFailed)
+	}
+}
+
+func TestLoginFailuresAreIndistinguishable(t *testing.T) {
+	repo := newFakeUserRepo()
+	svc, _ := newTestService(repo)
+	if _, err := svc.Register(context.Background(), "frank", "sercet-password"); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	_, missingErr := svc.Login(context.Background(), "nobody", "secret-password")
+	_, wrongErr := svc.Login(context.Background(), "frank", "wrong-password")
+
+	var missing, wrong *errs.AppError
+	if !errors.As(missingErr, &missing) || !errors.As(wrongErr, &wrong) {
+		t.Fatalf("errors = (%v, %v), want *errs.AppError", missingErr, wrongErr)
+	}
+
+	if missing.Code != wrong.Code ||
+		missing.Message != wrong.Message ||
+		missing.HTTPStatus != wrong.HTTPStatus {
+		t.Fatalf("login failures differ: missing=%+v wrong=%+v", missing, wrong)
 	}
 }
 

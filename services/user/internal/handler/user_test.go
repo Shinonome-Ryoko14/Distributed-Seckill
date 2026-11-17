@@ -157,10 +157,11 @@ func TestLoginSuccess(t *testing.T) {
 	}
 }
 
-// TestLoginWrongPassword 校验密码错误映射为 401 / CodePasswordWrong。
-func TestLoginWrongPassword(t *testing.T) {
+// TestLoginFailureMapsUnauthorized 校验登录失败映射为 401 / CodeLoginFailed。
+func TestLoginFailureMapsUnauthorized(t *testing.T) {
 	fake := &fakeUserService{
-		loginErr: errs.New(errs.CodePasswordWrong, "incorrect password", http.StatusUnauthorized),
+		loginErr: errs.New(errs.CodeLoginFailed, "invalid username or password",
+			http.StatusUnauthorized),
 	}
 	r := newTestRouter(fake)
 
@@ -170,26 +171,8 @@ func TestLoginWrongPassword(t *testing.T) {
 	if status != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
 	}
-	if resp.Code != errs.CodePasswordWrong {
-		t.Errorf("code = %d, want %d", resp.Code, errs.CodePasswordWrong)
-	}
-}
-
-// TestLoginUserNotFound 校验用户不存在映射为 401 / CodeUserNotFound。
-func TestLoginUserNotFound(t *testing.T) {
-	fake := &fakeUserService{
-		loginErr: errs.New(errs.CodeUserNotFound, "user not found", http.StatusUnauthorized),
-	}
-	r := newTestRouter(fake)
-
-	status, resp := doRequest(t, r, http.MethodPost, "/api/v1/users/login",
-		`{"username": "nobody", "password": "secret-password"}`)
-
-	if status != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want %d", status, http.StatusUnauthorized)
-	}
-	if resp.Code != errs.CodeUserNotFound {
-		t.Errorf("code = %d, want %d", resp.Code, errs.CodeUserNotFound)
+	if resp.Code != errs.CodeLoginFailed {
+		t.Errorf("code = %d, want %d", resp.Code, errs.CodeLoginFailed)
 	}
 }
 
