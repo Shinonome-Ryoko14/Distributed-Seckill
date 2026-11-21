@@ -17,7 +17,7 @@ func fakeLookup(values map[string]string) func(string) string {
 }
 
 func TestLoadDefaults(t *testing.T) {
-	cfg, err := load(fakeLookup(map[string]string{"testJWTSecret": "s3cret"}))
+	cfg, err := load(fakeLookup(map[string]string{"JWT_SECRET": testJWTSecret}))
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -64,7 +64,8 @@ func TestLoadDefaults(t *testing.T) {
 			cfg.MySQL.MaxOpenConns, cfg.MySQL.MaxIdleConns, defaultMaxOpenConns, defaultMaxIdleConns)
 	}
 	if cfg.JWT.Secret != testJWTSecret || cfg.JWT.TTL != defaultJWTTTL || cfg.JWT.Issuer != defaultJWTIssuer {
-		t.Errorf("JWT = %+v, want secret=s3cret ttl=%s issuer=%q", cfg.JWT, defaultJWTTTL, defaultJWTIssuer)
+		t.Errorf("JWT = %+v, want secret=%s ttl=%s issuer=%q",
+			cfg.JWT, testJWTSecret, defaultJWTTTL, defaultJWTIssuer)
 	}
 	if cfg.Redis.Addr != defaultRedisAddr || cfg.Redis.Password != "" || cfg.Redis.DB != defaultRedisDB {
 		t.Errorf("Redis = %+v, want addr=%q db=%d", cfg.Redis, defaultRedisAddr, defaultRedisDB)
@@ -73,7 +74,7 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestLoadEnvOverride(t *testing.T) {
 	cfg, err := load(fakeLookup(map[string]string{
-		"testJWTSecret":           "s",
+		"JWT_SECRET":              testJWTSecret,
 		"HTTP_ADDR":               ":9000",
 		"MYSQL_DSN":               "app:secret@tcp(db:3307)/custom?parseTime=true",
 		"JWT_TTL":                 "30m",
@@ -123,7 +124,7 @@ func TestLoadEnvOverride(t *testing.T) {
 
 func TestLoadPasswordFallback(t *testing.T) {
 	cfg, err := load(fakeLookup(map[string]string{
-		"testJWTSecret":       "s",
+		"JWT_SECRET":          testJWTSecret,
 		"MYSQL_ROOT_PASSWORD": "rootpw",
 	}))
 	if err != nil {
@@ -151,8 +152,8 @@ func TestLoadDSNOverride(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg, err := load(fakeLookup(map[string]string{
-				"testJWTSecret": "s",
-				"MYSQL_DSN":     tc.raw,
+				"JWT_SECRET": testJWTSecret,
+				"MYSQL_DSN":  tc.raw,
 			}))
 			if err != nil {
 				t.Fatalf("load: %v", err)
@@ -179,7 +180,7 @@ func TestLoadDSNSpecialPassword(t *testing.T) {
 	const password = "p@ss:word/with"
 
 	cfg, err := load(fakeLookup(map[string]string{
-		"testJWTSecret":  "s",
+		"JWT_SECRET":     testJWTSecret,
 		"MYSQL_PASSWORD": password,
 	}))
 	if err != nil {
@@ -203,15 +204,15 @@ func TestLoadRequiresJWTSecret(t *testing.T) {
 
 func TestLoadRejectsInvalidValues(t *testing.T) {
 	cases := map[string]map[string]string{
-		"bad int":                {"testJWTSecret": "s", "MYSQL_MAX_OPEN_CONNS": "abc"},
-		"bad duration":           {"testJWTSecret": "s", "JWT_TTL": "forever"},
-		"idle > open":            {"testJWTSecret": "s", "MYSQL_MAX_OPEN_CONNS": "2", "MYSQL_MAX_IDLE_CONNS": "3"},
-		"bad redis db":           {"testJWTSecret": "s", "REDIS_DB": "abc"},
-		"negative redis db":      {"testJWTSecret": "s", "REDIS_DB": "-1"},
-		"bad mysql dsn":          {"testJWTSecret": "s", "MYSQL_DSN": "not-a-dsn"},
-		"zero dial timeout":      {"testJWTSecret": "s", "MYSQL_DIAL_TIMEOUT": "0s"},
-		"negative read timeout":  {"testJWTSecret": "s", "MYSQL_READ_TIMEOUT": "-1s"},
-		"negative write timeout": {"testJWTSecret": "s", "MYSQL_WRITE_TIMEOUT": "-1s"},
+		"bad int":                {"JWT_SECRET": testJWTSecret, "MYSQL_MAX_OPEN_CONNS": "abc"},
+		"bad duration":           {"JWT_SECRET": testJWTSecret, "JWT_TTL": "forever"},
+		"idle > open":            {"JWT_SECRET": testJWTSecret, "MYSQL_MAX_OPEN_CONNS": "2", "MYSQL_MAX_IDLE_CONNS": "3"},
+		"bad redis db":           {"JWT_SECRET": testJWTSecret, "REDIS_DB": "abc"},
+		"negative redis db":      {"JWT_SECRET": testJWTSecret, "REDIS_DB": "-1"},
+		"bad mysql dsn":          {"JWT_SECRET": testJWTSecret, "MYSQL_DSN": "not-a-dsn"},
+		"zero dial timeout":      {"JWT_SECRET": testJWTSecret, "MYSQL_DIAL_TIMEOUT": "0s"},
+		"negative read timeout":  {"JWT_SECRET": testJWTSecret, "MYSQL_READ_TIMEOUT": "-1s"},
+		"negative write timeout": {"JWT_SECRET": testJWTSecret, "MYSQL_WRITE_TIMEOUT": "-1s"},
 		"short jwt secret":       {"JWT_SECRET": "short"},
 		"zero jwt ttl":           {"JWT_SECRET": testJWTSecret, "JWT_TTL": "0s"},
 		"negative jwt ttl":       {"JWT_SECRET": testJWTSecret, "JWT_TTL": "-1h"},

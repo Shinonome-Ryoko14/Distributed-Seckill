@@ -38,7 +38,7 @@ make migrate
 
 MySQL 配置：默认由 `MYSQL_HOST/PORT/DATABASE/USER/PASSWORD` 组合，密码缺省回退 `MYSQL_ROOT_PASSWORD`；也可用 `MYSQL_DSN` 整体覆盖（go-sql-driver 格式，不带 `mysql://`，`make migrate` 会自动补前缀）。连接/读写超时可用 `MYSQL_DIAL_TIMEOUT`（默认 3s）、`MYSQL_READ_TIMEOUT` / `MYSQL_WRITE_TIMEOUT`（默认 5s）调整。
 
-鉴权：`POST /api/v1/products` 与 `POST /api/v1/activities` 需要 `Authorization: Bearer <token>`，token 由 user 服务 `POST /api/v1/users/login` 获取；`GET` 接口与 `/healthz` 保持公开，未认证统一返回 HTTP `401` + 业务码 `50001`。
+鉴权：`POST /api/v1/products` 与 `POST /api/v1/activities` 需要 `Authorization: Bearer <token>`，token 由 user 服务 `POST /api/v1/users/login` 获取；`GET` 接口与 `/healthz` 保持公开，未认证统一返回 HTTP `401` + 业务码 `50001`。登录失败统一返回 HTTP `401` + 业务码 `10005`，不区分「用户不存在」与「密码错误」；`JWT_SECRET` 至少 32 字节。
 
 常用检查：
 

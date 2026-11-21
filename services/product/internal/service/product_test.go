@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 
@@ -16,6 +17,8 @@ type fakeProductRepo struct {
 	nextID      uint64
 	createCalls int
 	listErr     error
+	lastLimit   int
+	lastOffset  int
 }
 
 var _ repository.ProductRepository = (*fakeProductRepo)(nil)
@@ -37,7 +40,8 @@ func (f *fakeProductRepo) GetByID(_ context.Context, id uint64) (*model.Product,
 	return f.byID[id], nil
 }
 
-func (f *fakeProductRepo) List(_ context.Context, _, _ int) ([]*model.Product, error) {
+func (f *fakeProductRepo) List(_ context.Context, limit, offset int) ([]*model.Product, error) {
+	f.lastLimit, f.lastOffset = limit, offset
 	if f.listErr != nil {
 		return nil, f.listErr
 	}
@@ -151,5 +155,37 @@ func TestListNormalizePage(t *testing.T) {
 	}
 	if page.Total != 3 {
 		t.Errorf("Total = %d, want 3", page.Total)
+	}
+}
+
+func TestNormalizePageClampsMax(t *testing.T) {
+	page, size := normalizePage(math.MaxInt, maxPageSize)
+	if page != maxPage {
+		t.Errorf("page = %d, want %d", page, maxPage)
+	}
+	if size != maxPageSize {
+		t.Errorf("size = %d, want %d", size, maxPageSize)
+	}
+}
+
+func TestListHugePageOffsetDoesNotOverflow(t *testing.T) {
+	repo := newFakeProductRepo()
+	svc := NewProductService(repo)
+
+	got, err := svc.List(context.Background(), math.MaxInt, maxPageSize)
+	if err != nil {
+		t.Fatalf("List() error = %v, want nil", err)
+	}
+	if got.Page != maxPage {
+		t.Errorf("Page = %d, want %d", got.Page, maxPage)
+	}
+
+	wantOffset := (maxPage - 1) * maxPageSize
+	if repo.lastLimit != maxPageSize || repo.lastOffset != wantOffset {
+		t.Errorf("repo.List args = (%d,%d), want (%d,%d)",
+			repo.lastLimit, repo.lastOffset, maxPageSize, wantOffset)
+	}
+	if repo.lastOffset < 0 {
+		t.Errorf("offset = %d, must not be negative", repo.lastOffset)
 	}
 }

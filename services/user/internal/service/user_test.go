@@ -189,7 +189,7 @@ func TestLoginWrongPassword(t *testing.T) {
 func TestLoginFailuresAreIndistinguishable(t *testing.T) {
 	repo := newFakeUserRepo()
 	svc, _ := newTestService(repo)
-	if _, err := svc.Register(context.Background(), "frank", "sercet-password"); err != nil {
+	if _, err := svc.Register(context.Background(), "frank", "secret-password"); err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
 

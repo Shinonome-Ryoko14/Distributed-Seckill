@@ -17,6 +17,8 @@ const (
 	maxDescriptionLen = 255
 	defaultPageSize   = 20
 	maxPageSize       = 100
+	// maxPage 同时限制深分页慢查询与 (page-1)*size 的 int 溢出。
+	maxPage = 1_000_000
 )
 
 // CreateProductInput 是创建商品的业务入参。
@@ -73,8 +75,11 @@ func (s *ProductService) GetByID(ctx context.Context, id uint64) (*model.Product
 
 // List 归一化分页参数后查询商品。
 func (s *ProductService) List(ctx context.Context, page, size int) (*ProductPage, error) {
+	// page 已被 normalizePage 限制在 [1, maxPage]，size <= maxPageSize，
+	// 因此 offset 最大约 1e8，不会溢出 int。
 	page, size = normalizePage(page, size)
-	items, err := s.repo.List(ctx, size, (page-1)*size)
+	offset := (page - 1) * size
+	items, err := s.repo.List(ctx, size, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +113,9 @@ func validateCreate(in CreateProductInput) error {
 func normalizePage(page, size int) (int, int) {
 	if page < 1 {
 		page = 1
+	}
+	if page > maxPage {
+		page = maxPage
 	}
 	if size <= 0 {
 		size = defaultPageSize

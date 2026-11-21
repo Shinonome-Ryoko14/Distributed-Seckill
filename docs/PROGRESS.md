@@ -4,12 +4,12 @@
 
 ## 当前状态（最高读取权重 · 开工锚点）
 
-- **当前里程碑**: A — 同步直连全链路（每域一服务，W1–W3）；W1 基础接口与 W2 商品缓存子项已完成，W2 秒杀/订单部分尚未开始
-- **当前任务**: product 写接口 JWT 鉴权完成（`POST /products`、`POST /activities`）；`make lint && make test && make build` 全绿
-- **上次会话结束点**: 2026-11-07 完成 product 写接口 JWT 鉴权与 50001 错误码，补中间件/router 测试，已通过 lint/test/build，待提交
+- **当前里程碑**: A — 同步直连全链路（每域一服务，W1–W3）；W1 基础接口与遗留 P0 清理已完成，W2 商品缓存已完成，W2 秒杀/订单部分尚未开始
+- **当前任务**: W1 遗留 P0 收口完成（登录枚举/密码哈希/配置校验/分页上限）；`make lint && make test && make build` 全绿
+- **上次会话结束点**: 2026-11-21 完成 W1 遗留 P0 四项修复与单测，待提交
 - **下一步**: 进入 W2 秒杀接口 + 订单同步直建 + DB 条件更新防超卖
 - **范围基线**: 里程碑 C 采用「最小可信集」（ADR-0011）；A/B 做透，目标 **2026-11 底–12 月中收口**，2027-01–06 做第二个 Agent 项目
-- **阻塞**: 无硬阻塞；有代码审查待修复项（见下）
+- **阻塞**: 无硬阻塞；剩余为 P1/P2 代码审查项（见下）
 
 ## 影响分级图例
 
@@ -57,23 +57,22 @@
 | 2026-11-05 | A | MySQL 配置/DSN 统一：`MYSQL_DATABASE`、单一 `MYSQL_DSN`、驱动生成 DSN、连接/读写超时、启动 Ping deadline；ADR-0014 | 完成 | M | `Makefile`、`internal/config/config.go`、`config_test.go`、`services/{user,product}/cmd/server/main.go`、`deploy/.env.example`、`README.md`、`docs/DECISIONS.md` |
 | 2026-11-07 | A | Redis 客户端快速失败：显式 `MaxRetries: -1` 禁用 go-redis 默认 3 次重试，保留 300ms IO 超时，补客户端配置单测；更新 ADR-0012 | 完成 | M | `internal/rediscli/redis.go`、`internal/rediscli/redis_test.go`、`docs/DECISIONS.md`、`docs/PROGRESS.md` |
 | 2026-11-07 | A | product 写接口鉴权：新增 `internal/middleware.Auth`，`POST /products`、`POST /activities` 校验 Bearer JWT，未认证统一 401/50001，user_id 注入 ctx；补中间件与路由测试 | 完成 | L | `internal/middleware/auth.go`、`auth_test.go`、`internal/errs/errs.go`、`services/product/internal/handler/router.go`、`router_test.go`、`product_test.go`、`activity_test.go`、`services/product/cmd/server/main.go`、`docs/DECISIONS.md`、`docs/PROGRESS.md` |
+| 2026-11-21 | A | W1 遗留 P0 收口：登录失败统一 10005、`PasswordHash` 隐藏、配置边界校验、分页上限 | 完成 | L | `internal/errs/errs.go`、`services/user/internal/{service,model,handler}/*`、`internal/config/config.go`、`config_test.go`、`services/product/internal/service/product.go`、`product_test.go`、`docs/DECISIONS.md`、`docs/PROGRESS.md`、`README.md`、`deploy/.env.example` |
 
 ## 已知问题 / 待办池
 
 - 本机原生 MySQL 占用 3306，compose 使用 3307（ADR-0007）。
 - 工具链已装（`make tools`）：golangci-lint `v2.12.2` / goimports `v0.49.0` / golang-migrate `v4.19.1`。**注意**：golangci-lint `v2.13+` 要求 Go ≥1.26，当前 Go 为 1.25.0，故钉在 v2.12.2；k6/wrk 到里程碑 C。
 - MySQL 的 `--` 行注释**后面必须跟空格**（`--bcrypt...` 会报 1064 语法错）。
-- 应用配置走环境变量（见 `internal/config`）：`HTTP_ADDR`（默认 `:8080`，各服务需自行覆盖，如 user `:8081`）、`MYSQL_HOST/PORT/DATABASE/USER/PASSWORD`（密码缺省回退 `MYSQL_ROOT_PASSWORD`；`MYSQL_DSN` 可整体覆盖，格式为 go-sql-driver DSN、不带 `mysql://`，`make migrate` 会自动补前缀）、`MYSQL_DIAL_TIMEOUT`/`MYSQL_READ_TIMEOUT`/`MYSQL_WRITE_TIMEOUT`（默认 `3s`/`5s`/`5s`）、`JWT_SECRET`（当前共享加载必填，product 也被迫要求，待解耦）/`JWT_TTL`/`JWT_ISSUER`、`LOG_FORMAT`/`LOG_LEVEL`、`PRODUCT_CACHE_TTL`/`PRODUCT_CACHE_NULL_TTL`。`config.Load()` 默认 best-effort 加载 `deploy/.env`（`ENV_FILE` 可改），已有环境变量优先；本地 `deploy/.env` 已补 `JWT_SECRET`。
+- 应用配置走环境变量（见 `internal/config`）：`HTTP_ADDR`（默认 `:8080`，各服务需自行覆盖，如 user `:8081`）、`MYSQL_HOST/PORT/DATABASE/USER/PASSWORD`（密码缺省回退 `MYSQL_ROOT_PASSWORD`；`MYSQL_DSN` 可整体覆盖，格式为 go-sql-driver DSN、不带 `mysql://`，`make migrate` 会自动补前缀）、`MYSQL_DIAL_TIMEOUT`/`MYSQL_READ_TIMEOUT`/`MYSQL_WRITE_TIMEOUT`（默认 `3s`/`5s`/`5s`）、`JWT_SECRET`（必填，至少 32 字节）/`JWT_TTL`/`JWT_ISSUER`、`LOG_FORMAT`/`LOG_LEVEL`、`PRODUCT_CACHE_TTL`/`PRODUCT_CACHE_NULL_TTL`。`config.Load()` 默认 best-effort 加载 `deploy/.env`（`ENV_FILE` 可改），已有环境变量优先；本地 `deploy/.env` 已补 `JWT_SECRET`。
 - 迁移失败会把 `schema_migrations` 置为 dirty：若失败发生在首个 DDL 且未建任何业务表，直接 `DROP TABLE schema_migrations;` 后重跑 `make migrate`；`make migrate-force V=<上一版本>` 可用于已知版本的恢复（勿用 `V=0`，它会被当成真实版本）。
 - product repository 已有 Cache Aside 装饰器单测（fake cache），真实 SQL 与真实 Redis 序列化仍依赖 E2E，尚未接入 testcontainers/miniredis；活动接口的「预热触发」按计划后置到里程碑 B。
 - 缓存只完成了「穿透」防护（负缓存）；「击穿」（singleflight/逻辑过期）与「雪崩」（TTL 抖动）计划在压测前补齐，见 ADR-0012「影响与后续」。
 
-### 代码审查待修复（2026-10-30，2026-11-07 更新）
+### 代码审查待修复（2026-10-30，2026-11-21 更新）
 
-> 2026-11-02 已修复活动创建校验与错误码跨域；2026-11-05 MySQL 配置/DSN 改造完成；2026-11-07 product 写接口鉴权完成；以下为其他剩余项。
+> 2026-11-02 已修复活动创建校验与错误码跨域；2026-11-05 MySQL 配置/DSN 改造完成；2026-11-07 product 写接口鉴权完成；2026-11-21 W1 P0 四项收口完成；以下为其他剩余项。
 
-- **中**：登录对「用户不存在/密码错误」返回不同错误码，存在用户名枚举；`User.PasswordHash` 未加 `json:"-"`。
 - **中**：`gin.Recovery`/未知路由未走统一响应；`response.Fail` 对内部错误只返回 500、不记录 cause。
-- **中**：配置校验不足：`JWT_TTL<=0`、连接池 `<=0`、`JWT_SECRET` 最小长度未校验。
 - **中**：ADR-0002「只有 order 写 `seckill_stock`」与 product 创建活动时写入初始库存存在语义冲突，已在 **ADR-0013** 明确「product 只在创建时写初始值，order 只负责运行时扣减/回补」；代码注释/表注释按此口径补齐。
-- **低**：分页 `(page-1)*size` 可能溢出；`loc=Local` 依赖宿主机时区；`_ = err` 若干处未按规范注释；`Makefile` 的 `migrate-down` 错误提示仍写 `MYSQL_ROOT_PASSWORD`（实际检查 `MYSQL_PASSWORD`），不影响功能；README 已补最小启动/文档索引，API 文档仍待后续补。
+- **低**：`loc=Local` 依赖宿主机时区；`_ = err` 若干处未按规范注释；`Makefile` 的 `migrate-down` 错误提示仍写 `MYSQL_ROOT_PASSWORD`（实际检查 `MYSQL_PASSWORD`），不影响功能；README 已补最小启动/文档索引，API 文档仍待后续补。
