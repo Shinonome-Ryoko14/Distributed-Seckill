@@ -10,12 +10,14 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
+const testJWTSecret = "0123456789abcdef0123456789abcdef"
+
 func fakeLookup(values map[string]string) func(string) string {
 	return func(key string) string { return values[key] }
 }
 
 func TestLoadDefaults(t *testing.T) {
-	cfg, err := load(fakeLookup(map[string]string{"JWT_SECRET": "s3cret"}))
+	cfg, err := load(fakeLookup(map[string]string{"testJWTSecret": "s3cret"}))
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -61,7 +63,7 @@ func TestLoadDefaults(t *testing.T) {
 		t.Errorf("MySQL pool = (%d,%d), want (%d,%d)",
 			cfg.MySQL.MaxOpenConns, cfg.MySQL.MaxIdleConns, defaultMaxOpenConns, defaultMaxIdleConns)
 	}
-	if cfg.JWT.Secret != "s3cret" || cfg.JWT.TTL != defaultJWTTTL || cfg.JWT.Issuer != defaultJWTIssuer {
+	if cfg.JWT.Secret != testJWTSecret || cfg.JWT.TTL != defaultJWTTTL || cfg.JWT.Issuer != defaultJWTIssuer {
 		t.Errorf("JWT = %+v, want secret=s3cret ttl=%s issuer=%q", cfg.JWT, defaultJWTTTL, defaultJWTIssuer)
 	}
 	if cfg.Redis.Addr != defaultRedisAddr || cfg.Redis.Password != "" || cfg.Redis.DB != defaultRedisDB {
@@ -71,7 +73,7 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestLoadEnvOverride(t *testing.T) {
 	cfg, err := load(fakeLookup(map[string]string{
-		"JWT_SECRET":              "s",
+		"testJWTSecret":           "s",
 		"HTTP_ADDR":               ":9000",
 		"MYSQL_DSN":               "app:secret@tcp(db:3307)/custom?parseTime=true",
 		"JWT_TTL":                 "30m",
@@ -121,7 +123,7 @@ func TestLoadEnvOverride(t *testing.T) {
 
 func TestLoadPasswordFallback(t *testing.T) {
 	cfg, err := load(fakeLookup(map[string]string{
-		"JWT_SECRET":          "s",
+		"testJWTSecret":       "s",
 		"MYSQL_ROOT_PASSWORD": "rootpw",
 	}))
 	if err != nil {
@@ -149,8 +151,8 @@ func TestLoadDSNOverride(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg, err := load(fakeLookup(map[string]string{
-				"JWT_SECRET": "s",
-				"MYSQL_DSN":  tc.raw,
+				"testJWTSecret": "s",
+				"MYSQL_DSN":     tc.raw,
 			}))
 			if err != nil {
 				t.Fatalf("load: %v", err)
@@ -177,7 +179,7 @@ func TestLoadDSNSpecialPassword(t *testing.T) {
 	const password = "p@ss:word/with"
 
 	cfg, err := load(fakeLookup(map[string]string{
-		"JWT_SECRET":     "s",
+		"testJWTSecret":  "s",
 		"MYSQL_PASSWORD": password,
 	}))
 	if err != nil {
@@ -201,15 +203,21 @@ func TestLoadRequiresJWTSecret(t *testing.T) {
 
 func TestLoadRejectsInvalidValues(t *testing.T) {
 	cases := map[string]map[string]string{
-		"bad int":                {"JWT_SECRET": "s", "MYSQL_MAX_OPEN_CONNS": "abc"},
-		"bad duration":           {"JWT_SECRET": "s", "JWT_TTL": "forever"},
-		"idle > open":            {"JWT_SECRET": "s", "MYSQL_MAX_OPEN_CONNS": "2", "MYSQL_MAX_IDLE_CONNS": "3"},
-		"bad redis db":           {"JWT_SECRET": "s", "REDIS_DB": "abc"},
-		"negative redis db":      {"JWT_SECRET": "s", "REDIS_DB": "-1"},
-		"bad mysql dsn":          {"JWT_SECRET": "s", "MYSQL_DSN": "not-a-dsn"},
-		"zero dial timeout":      {"JWT_SECRET": "s", "MYSQL_DIAL_TIMEOUT": "0s"},
-		"negative read timeout":  {"JWT_SECRET": "s", "MYSQL_READ_TIMEOUT": "-1s"},
-		"negative write timeout": {"JWT_SECRET": "s", "MYSQL_WRITE_TIMEOUT": "-1s"},
+		"bad int":                {"testJWTSecret": "s", "MYSQL_MAX_OPEN_CONNS": "abc"},
+		"bad duration":           {"testJWTSecret": "s", "JWT_TTL": "forever"},
+		"idle > open":            {"testJWTSecret": "s", "MYSQL_MAX_OPEN_CONNS": "2", "MYSQL_MAX_IDLE_CONNS": "3"},
+		"bad redis db":           {"testJWTSecret": "s", "REDIS_DB": "abc"},
+		"negative redis db":      {"testJWTSecret": "s", "REDIS_DB": "-1"},
+		"bad mysql dsn":          {"testJWTSecret": "s", "MYSQL_DSN": "not-a-dsn"},
+		"zero dial timeout":      {"testJWTSecret": "s", "MYSQL_DIAL_TIMEOUT": "0s"},
+		"negative read timeout":  {"testJWTSecret": "s", "MYSQL_READ_TIMEOUT": "-1s"},
+		"negative write timeout": {"testJWTSecret": "s", "MYSQL_WRITE_TIMEOUT": "-1s"},
+		"short jwt secret":       {"JWT_SECRET": "short"},
+		"zero jwt ttl":           {"JWT_SECRET": testJWTSecret, "JWT_TTL": "0s"},
+		"negative jwt ttl":       {"JWT_SECRET": testJWTSecret, "JWT_TTL": "-1h"},
+		"zero max open":          {"JWT_SECRET": testJWTSecret, "MYSQL_MAX_OPEN_CONNS": "0"},
+		"negative max idle":      {"JWT_SECRET": testJWTSecret, "MYSQL_MAX_IDLE_CONNS": "-1"},
+		"zero conn max lifetime": {"JWT_SECRET": testJWTSecret, "MYSQL_CONN_MAX_LIFETIME": "0s"},
 	}
 	for name, env := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -217,6 +225,14 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 				t.Fatalf("load should fail for %s", name)
 			}
 		})
+	}
+}
+
+func TestLoadAcceptsMinimumJWTSecret(t *testing.T) {
+	if _, err := load(fakeLookup(map[string]string{
+		"JWT_SECRET": testJWTSecret,
+	})); err != nil {
+		t.Fatalf("load() error = %v, want nil", err)
 	}
 }
 

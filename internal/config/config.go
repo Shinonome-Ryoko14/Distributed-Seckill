@@ -28,6 +28,7 @@ const (
 	defaultMySQLReadTimeout  = 5 * time.Second
 	defaultMySQLWriteTimeout = 5 * time.Second
 	defaultJWTIssuer         = "distributed-seckill"
+	minJWTSecretBytes        = 32
 	defaultRedisAddr         = "127.0.0.1:6379"
 	defaultRedisDB           = 0
 )
@@ -134,10 +135,16 @@ func load(lookup func(string) string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	if jwtTTL <= 0 {
+		return nil, fmt.Errorf("JWT_TTL must be > 0, got %s", jwtTTL)
+	}
 
 	secret := lookup("JWT_SECRET")
 	if secret == "" {
 		return nil, fmt.Errorf("JWT_SECRET is required")
+	}
+	if len(secret) < minJWTSecretBytes {
+		return nil, fmt.Errorf("JWT_SECRET must be at least %d bytes, got %d", minJWTSecretBytes, len(secret))
 	}
 
 	dsn, err := mysqlDSN(lookup, dialTimeout, readTimeout, writeTimeout)
@@ -171,6 +178,15 @@ func load(lookup func(string) string) (*Config, error) {
 		},
 	}
 
+	if cfg.MySQL.MaxOpenConns <= 0 {
+		return nil, fmt.Errorf("MYSQL_MAX_OPEN_CONNS must be > 0, got %d", cfg.MySQL.MaxOpenConns)
+	}
+	if cfg.MySQL.MaxIdleConns < 0 {
+		return nil, fmt.Errorf("MYSQL_MAX_IDLE_CONNS must be >= 0, got %d", cfg.MySQL.MaxIdleConns)
+	}
+	if cfg.MySQL.ConnMaxLifetime <= 0 {
+		return nil, fmt.Errorf("MYSQL_CONN_MAX_LIFETIME must be > 0, got %s", cfg.MySQL.ConnMaxLifetime)
+	}
 	if cfg.MySQL.MaxIdleConns > cfg.MySQL.MaxOpenConns {
 		return nil, fmt.Errorf("MYSQL_MAX_IDLE_CONNS (%d) must not exceed MYSQL_MAX_OPEN_CONNS (%d)",
 			cfg.MySQL.MaxIdleConns, cfg.MySQL.MaxOpenConns)
